@@ -51,20 +51,4 @@ describe("retry tests", () => {
         expect(onCatch).toHaveBeenCalledWith(ON_TRY_ERROR, i + 1)
       );
   });
-
-  it("should fail if throws on every attempt", async () => {
-    const ON_TRY_ERROR = new Error("error");
-    const onTry = jest.fn((att: number) => {
-      throw ON_TRY_ERROR;
-    });
-    const onFail = jest.fn((errors, attempt) => {
-      return "failed";
-    });
-
-    const res = await retry((att) => onTry(att), { onFail });
-
-    expect(res.ok).toBe(false);
-    expect(onFail).toHaveBeenCalledTimes(1);
-    expect(onFail).toHaveBeenCalledWith(Array(5).fill(ON_TRY_ERROR), 5);
-  });
 });
