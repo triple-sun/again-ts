@@ -12,31 +12,24 @@ import { wait } from "./wait";
  */
 export const retry = async <T>(
   onTry: (attempt: number, ...args: unknown[]) => Promise<T> | T,
-  options: RetryOptions = {
+  { onCatch, tries = 5, delay = 100, exponential = false }: RetryOptions = {
     tries: 5,
     delay: 100,
     exponential: false,
   }
 ): Promise<RetryOkResult<T> | RetryFailedResult> => {
   let attempts = 0;
-
-  const { onCatch, tries = 5, delay = 100, exponential = false } = options;
-
   const errors: unknown[] = [];
 
   while (tries === 0 || attempts < tries) {
     attempts += 1;
     try {
       const result = await onTry(attempts);
-      return { ok: true, result, attempts };
+      return { ok: true, value: result, attempts };
     } catch (error) {
       errors.push(error);
-      /** Call onCatch function if present */
       if (onCatch) await onCatch(error, attempts);
-      /** Wait for set time if present */
       if (delay) await wait(exponential ? delay * attempts : delay);
-      /** Continue to next iteration */
-      continue;
     }
   }
 

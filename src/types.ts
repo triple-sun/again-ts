@@ -11,7 +11,7 @@ export type RetryOptions = {
 
 export type RetryOkResult<T> = {
   ok: true;
-  result: Awaited<T>;
+  value: Awaited<T>;
   attempts: number;
 };
 
