@@ -34,7 +34,7 @@ export const retry = async <Result>(
 		attempt: 0,
 		triesConsumed: 0,
 		triesLeft: 0,
-		startTime: performance.now(),
+		start: performance.now(),
 	};
 
 	while (Number.isFinite(options.tries) || context.attempt < options.tries) {
@@ -45,14 +45,14 @@ export const retry = async <Result>(
 			return {
 				ok: true,
 				value: result,
-				context: { ...context, endTime: performance.now() },
+				context: { ...context, end: performance.now() },
 			};
 		} catch (error) {
 			onFail(error, context, options);
 		}
 	}
 
-	return { ok: false, context: { ...context, endTime: performance.now() } };
+	return { ok: false, context: { ...context, end: performance.now() } };
 };
 
 export const retryify = <Arguments extends unknown[], Result>(

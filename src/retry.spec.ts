@@ -70,9 +70,23 @@ describe("retry tests", () => {
 });
 
 describe("retryify tests", () => {
-	const testFn = (i: number) => {
-		return `Got ${i}!`;
-	};
+	it("should handle retryify correctly", async () => {
+		const testFn = (i: number) => {
+			if (Math.random() > 0) {
+				return `Got ${i}!`;
+			} else {
+				throw new Error("Got error!");
+			}
+		};
 
-	const retriableTestFn = retryify(testFn, { tries: 5 });
+		const retriableTestFn = retryify(testFn, { tries: 5 });
+		const result = await retriableTestFn(10);
+
+		if (result.ok) {
+			expect(result.value).toBe(`Got 10!`);
+		} else {
+			expect(result.context.errors[0]?.message).toBe("Got error");
+			expect(result.context.attempt).toBeGreaterThan(0);
+		}
+	});
 });

@@ -4,8 +4,8 @@ export type RetryContext = {
 	attempt: number;
 	triesLeft: number;
 	triesConsumed: number;
-	endTime?: DOMHighResTimeStamp;
-	readonly startTime: DOMHighResTimeStamp;
+	end?: DOMHighResTimeStamp;
+	readonly start: DOMHighResTimeStamp;
 };
 
 export type RetryOptions = {
