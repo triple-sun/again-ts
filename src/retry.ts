@@ -1,16 +1,18 @@
+import { ErrorTypeError } from "./errors";
 import type {
+	OnTryFunction,
 	RetryContext,
 	RetryFailedResult,
 	RetryOkResult,
 	RetryOptions,
-	SealedOptions,
+	SealedRetryOptions,
 } from "./types";
 import {
+	getTimeRemaining,
+	getTriesLeft,
 	getWaitTime,
 	handleError,
-	handleTimeLimit,
-	handleTries,
-	handleWait,
+	handleWaitTime,
 	validateNumericOption,
 } from "./utils";
 
@@ -19,14 +21,15 @@ import {
  * @param options - @see RetryOptions
  * @returns @see RetryOkResult @see RetryFailedResult
  */
-export const retry = async <Result>(
-	onTry: (att: number, ...args: unknown[]) => Promise<Result> | Result,
-	options: RetryOptions = {},
-): Promise<RetryOkResult<Result> | RetryFailedResult> => {
+export const retry = async <VALUE_TYPE>(
+	onTry: OnTryFunction<VALUE_TYPE>,
+	options: Readonly<RetryOptions> = {},
+): Promise<RetryOkResult<VALUE_TYPE> | RetryFailedResult> => {
 	/** prevent option mutation */
-	const o: SealedOptions = {
+	const o: SealedRetryOptions = {
 		tries: options.tries ?? 5,
-		timeLimit: options.timeLimit ?? Number.POSITIVE_INFINITY,
+		timeMin: 0,
+		timeMax: options.timeMax ?? Number.POSITIVE_INFINITY,
 		waitMin: options.waitMin ?? 1000,
 		waitMax: options.waitMax ?? Number.POSITIVE_INFINITY,
 		factor: options.factor ?? 1,
@@ -42,6 +45,7 @@ export const retry = async <Result>(
 	/** validate options */
 	validateNumericOption("tries", o.tries, {
 		finite: false,
+		min: 1,
 	});
 	validateNumericOption("waitMin", o.waitMin, {
 		finite: true,
@@ -49,7 +53,7 @@ export const retry = async <Result>(
 	validateNumericOption("waitMax", o.waitMax, {
 		finite: false,
 	});
-	validateNumericOption("timeLimit", o.timeLimit, {
+	validateNumericOption("timeLimit", o.timeMax, {
 		finite: false,
 	});
 	validateNumericOption("factor", o.factor, {
@@ -61,7 +65,6 @@ export const retry = async <Result>(
 		errors: [],
 		attempts: 0,
 		triesConsumed: 0,
-		triesLeft: 0,
 		start: performance.now(),
 		end: performance.now(),
 	};
@@ -70,53 +73,64 @@ export const retry = async <Result>(
 		c.attempts++;
 
 		try {
+			o.signal?.throwIfAborted();
+			const value = await onTry(c);
+
+			o.signal?.throwIfAborted();
 			return {
 				ok: true,
-				value: await onTry(c.attempts),
+				value,
 				context: { ...c, end: performance.now() },
 			};
-		} catch (e) {
+		} catch (tryError) {
 			try {
-				const error = handleError(e, c, o);
+				const e = handleError(tryError, c, o);
 
 				o.signal?.throwIfAborted();
-				handleTries(error, c, o);
+				const triesLeft = getTriesLeft(c, o);
 
 				o.signal?.throwIfAborted();
-				const timeRemaining = handleTimeLimit(error, c.start, o.timeLimit);
+				const timeRemaining = getTimeRemaining(c.start, o.timeMax);
 
 				o.signal?.throwIfAborted();
 				await o.onCatch(c);
 
+				if (timeRemaining <= 0 || triesLeft <= 0) {
+					throw e;
+				}
+
+				if (e instanceof ErrorTypeError) {
+					if (await o.consumeIf(c)) {
+						throw e;
+					}
+
+					options.signal?.throwIfAborted();
+					continue;
+				}
+
 				o.signal?.throwIfAborted();
-				if (!(await o.consumeIf(c))) continue;
-				if (!(await o.retryIf(c))) throw error;
+				if (!(await o.retryIf(c))) {
+					throw e;
+				}
+
+				o.signal?.throwIfAborted();
+				if (!(await o.consumeIf(c))) {
+					continue;
+				}
 
 				o.signal?.throwIfAborted();
 				const waitTime = getWaitTime(timeRemaining, c.triesConsumed, o);
 
 				o.signal?.throwIfAborted();
-				await handleWait(waitTime, o.signal);
+				await handleWaitTime(waitTime, o.signal);
 
 				c.triesConsumed++;
-			} catch (e) {
-				console.error("caught", e);
-				handleError(e, c, o);
+			} catch (lastError) {
+				handleError(lastError, c, o);
 				break;
 			}
 		}
 	}
 
 	return { ok: false, context: { ...c, end: performance.now() } };
-};
-
-export const retryify = <Arguments extends unknown[], Result>(
-	function_: (...arguments_: Arguments) => Promise<Result> | Result,
-	options: RetryOptions,
-): ((
-	...arguments_: Arguments
-) => Promise<RetryFailedResult | RetryOkResult<Result>>) => {
-	return (...arguments_) => {
-		return retry(() => function_.apply(this, arguments_), options);
-	};
 };

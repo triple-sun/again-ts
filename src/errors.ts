@@ -1,5 +1,5 @@
-export class AbortError extends Error {
-	readonly name: "AbortError";
+export class StopRetryError extends Error {
+	readonly name: typeof StopRetryError.name;
 	readonly original: Error;
 	constructor(message: string | Error) {
 		super();
@@ -12,7 +12,18 @@ export class AbortError extends Error {
 			this.original.stack = this.stack;
 		}
 
-		this.name = "AbortError";
+		this.name = StopRetryError.name;
 		this.message = message;
 	}
 }
+
+export class ErrorTypeError extends Error {
+		readonly name: typeof ErrorTypeError.name;
+
+		constructor(e: unknown) {
+			super();
+
+			this.message = `Expected instanceof Error, got: "${typeof e}"`;
+			this.name = ErrorTypeError.name;
+		}
+	}

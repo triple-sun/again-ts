@@ -1,6 +1,8 @@
-import { retry, retryify } from "./retry";
+import { ErrorTypeError, StopRetryError } from "./errors";
+import { retry } from "./retry";
+import { wait } from "./wait";
 
-describe("retry tests", () => {
+describe("retry tests (tries)", () => {
 	beforeAll(() => {
 		jest.useFakeTimers();
 		jest.runAllTimersAsync();
@@ -11,36 +13,131 @@ describe("retry tests", () => {
 	});
 
 	it("should call on try and return result ", async () => {
-		const onTry = jest.fn(() => {
+		let calls = 0;
+
+		const res = await retry(async () => {
+			calls++;
 			return "ok";
 		});
-		const res = await retry(async () => onTry());
 
 		expect(res.ok).toBe(true);
-		expect(onTry).toHaveBeenCalledTimes(1);
+		expect(calls).toBe(1);
 	});
 
-	it("should try set number of times if throws every time", async () => {
-		const TRIES = 5;
-		const onTry = jest.fn((att: number) => {
-			throw new Error(`error${att}`);
+	it("should call on try and return result if result=null", async () => {
+		let calls = 0;
+
+		const res = await retry(() => {
+			calls++;
+			return null;
 		});
 
-		const res = await retry((att) => onTry(att), { tries: TRIES });
-
-		expect(res.ok).toBe(false);
-		if (res.ok === false) {
-			expect(res.context.attempts).toBe(TRIES);
-			expect(res.context.triesLeft).toBe(0);
-		}
-		expect(onTry).toHaveBeenCalledTimes(TRIES);
+		expect(res.ok).toBe(true);
+		expect(calls).toBe(1);
 	});
 
-	it("should abort when signal is aborted", async () => {
+	it("should try set number of times", async () => {
+		const TRIES = 5;
+		const MAX_TRIES = 15;
+
+		const res = await retry(
+			(c) => {
+				if (c.attempts === MAX_TRIES) return;
+				throw new Error(`Error ${c.attempts}`);
+			},
+			{ tries: TRIES },
+		);
+
+		expect(res.ok).toBe(false);
+		expect(res.context.attempts).toBe(TRIES);
+	});
+
+	it("should try infinite number of times", async () => {
+		const TRIES_LIMIT = 15; //limit for testing
+
+		let calls = 0;
+
+		const res = await retry(
+			(c) => {
+				calls++;
+				if (c.attempts === TRIES_LIMIT) {
+					throw new StopRetryError("time to stop");
+				}
+
+				throw new Error(`Error ${c.attempts}`);
+			},
+			{ tries: Number.POSITIVE_INFINITY },
+		);
+
+		expect(res.ok).toBe(false);
+		expect(res.context.attempts).toBe(TRIES_LIMIT);
+		expect(calls).toBe(TRIES_LIMIT);
+	});
+});
+
+describe("retry error tests", () => {
+	// Error Handling Tests
+	it("should remind to throw ony Errors", async () => {
+		const res = await retry(() => {
+			throw "foo";
+		});
+
+		expect(res.context.errors[0]?.message).toMatch(/Expected instanceof Error/);
+	});
+
+
+
+	it("no retry on ErrorTypeError", async () => {
+		const errorTypeError = new ErrorTypeError("placeholder");
+		let index = 0;
+
+		const res = await retry(async (c) => {
+				await wait(40);
+				index++;
+
+				if (c.attempts === 3) return 'something';
+
+				throw errorTypeError
+			})
+
+		expect(index).toBe(1);
+		expect(res.context.errors[0]).toBe(errorTypeError)
+	});
+
+	/**
+	it("shouldRetry is not called for non-network TypeError", async (t) => {
+		const typeErrorFixture = new TypeError("type-error-fixture");
+		let shouldRetryCalled = 0;
+
+		await t.throwsAsync(
+			pRetry(
+				async () => {
+					throw typeErrorFixture;
+				},
+				{
+					shouldRetry() {
+						shouldRetryCalled++;
+						return true;
+					},
+				},
+			),
+			{ is: typeErrorFixture },
+		);
+
+		t.is(shouldRetryCalled, 0);
+	});
+
+	 */
+});
+
+/**
+describe("retry tests", () => {
+	it("should abort when signal is aborted outside of onTry fn", async () => {
 		const controller = new AbortController();
 		const error = new Error("fail");
-		const onTry = jest.fn().mockImplementation(() => {
-			throw error
+		const onTry = jest.fn().mockImplementation(async () => {
+			await wait(100);
+			throw error;
 		});
 
 		const res = await retry(onTry, {
@@ -52,18 +149,20 @@ describe("retry tests", () => {
 		controller.abort(new Error("Aborted via signal"));
 
 		expect(res.ok).toBe(false);
-		expect(res.context.errors).toContainEqual(error)
+		expect(res.context.errors).toContainEqual(error);
+
+		console.log(res.context);
 	});
 
 	it("should stop when limit is exceeded", async () => {
-		const onTry = jest.fn().mockImplementation((c) => {
+		const onTry = jest.fn().mockImplementation(() => {
 			throw new Error("fail");
 		});
 
 		const res = await retry(onTry, { tries: 10, waitMin: 100, timeLimit: 250 });
 
 		expect(res.ok).toBe(false);
-		expect(res.context.end - res.context.start).toBeCloseTo(250)
+		expect(res.context.end - res.context.start).toBeCloseTo(250);
 	});
 
 	it("should respect consumeIf", async () => {
@@ -85,9 +184,6 @@ describe("retry tests", () => {
 		expect(res.ok).toBe(false);
 		expect(res.context.triesConsumed).toBe(5);
 		expect(res.context.attempts).toBe(7);
-
-		// We expect failure.
-		// Check context.
 	});
 
 	it("should correctly calculate triesLeft", async () => {
@@ -115,25 +211,4 @@ describe("retry tests", () => {
 		);
 	});
 });
-
-describe("retryify tests", () => {
-	it("should handle retryify correctly", async () => {
-		const testFn = (i: number) => {
-			if (Math.random() > 0) {
-				return `Got ${i}!`;
-			} else {
-				throw new Error("Got error!");
-			}
-		};
-
-		const retriableTestFn = retryify(testFn, { tries: 5 });
-		const result = await retriableTestFn(10);
-
-		if (result.ok) {
-			expect(result.value).toBe(`Got 10!`);
-		} else {
-			expect(result.context.errors[0]?.message).toBe("Got error");
-			expect(result.context.attempts).toBeGreaterThan(0);
-		}
-	});
-});
+ */

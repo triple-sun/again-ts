@@ -1,6 +1,6 @@
 import { deepStrictEqual } from "node:assert";
-import { AbortError } from "./errors";
-import type { RetryContext, RetryOptions, SealedOptions } from "./types";
+import { ErrorTypeError, StopRetryError } from "./errors";
+import type { RetryContext, SealedRetryOptions } from "./types";
 
 export const validateNumericOption = (
 	name: string,
@@ -19,90 +19,65 @@ export const validateNumericOption = (
 	}
 };
 
-export const sealOptions = (options: RetryOptions): SealedOptions => {
-	return {
-		tries: options.tries ?? 5,
-		timeLimit: options.timeLimit ?? Number.POSITIVE_INFINITY,
-		waitMin: options.waitMin ?? 1000,
-		waitMax: options.waitMax ?? Number.POSITIVE_INFINITY,
-		factor: options.factor ?? 1,
-		linear: options.linear ?? false,
-		random: false,
-		skipSameErrorCheck: options.skipSameErrorCheck || false,
-		onCatch: options.onCatch ?? (() => {}),
-		consumeIf: options.consumeIf ?? (() => true),
-		retryIf: options.retryIf ?? (() => true),
-		signal: options.signal || null,
-	};
-};
-
 export const handleError = (
 	e: unknown,
-	{ errors }: RetryContext,
-	{ skipSameErrorCheck }: SealedOptions,
+	c: RetryContext,
+	o: SealedRetryOptions,
 ): Error => {
-	const error =
-		e instanceof Error
-			? e
-			: new TypeError(`Expected instanceof Error, got: "${e}"`);
+	const error = e instanceof Error ? e : new ErrorTypeError(e);
 
-	if (skipSameErrorCheck) {
+	if (o.skipSameErrorCheck) {
 		/** push error to context.errors */
-		errors.push(error);
+		c.errors.push(error);
 	} else {
 		try {
 			/** check if our last error was the same as this one */
-			deepStrictEqual(errors[errors.length - 1], e);
+			deepStrictEqual(c.errors[c.errors.length - 1], e);
 		} catch (_err) {
 			/** if not - push */
-			errors.push(error);
+			c.errors.push(error);
 		}
 	}
 
-	if (error instanceof AbortError) return error.original;
+	if (error instanceof StopRetryError) throw error.original;
 
 	return error;
 };
 
-export const handleTries = (
-	e: Error,
-	{ triesConsumed, triesLeft }: RetryContext,
-	{ tries }: SealedOptions,
-): void => {
-	if (!Number.isFinite(triesLeft)) return;
-	triesLeft = Math.max(0, tries - triesConsumed);
-	if (triesLeft <= 0) throw e;
+export const getTriesLeft = (
+	c: RetryContext,
+	o: SealedRetryOptions,
+): number => {
+	if (Number.isFinite(o.tries)) {
+		return Math.max(0, o.tries - c.triesConsumed);
+	}
+	return o.tries;
 };
 
-export const handleTimeLimit = (
-	e: Error,
-	start: number,
-	timeLimit: number,
-): number => {
-	const elapsed = performance.now() - start;
-	if (elapsed > timeLimit) throw e;
-	/** return time remaining */
-	if (Number.isFinite(timeLimit)) return timeLimit - elapsed
-	return timeLimit
+export const getTimeRemaining = (start: number, timeMax: number) => {
+	if (!Number.isFinite(timeMax)) {
+		return timeMax;
+	}
+	return timeMax - (performance.now() - start);
 };
 
 export const getWaitTime = (
 	timeRemaining: number,
 	triesConsumed: number,
-	{ random, linear, factor, waitMin, waitMax }: SealedOptions,
+	{ random, linear, factor, waitMin, waitMax }: SealedRetryOptions,
 ) => {
 	const randomX = random ? Math.random() + 1 : 1;
 	const linearX = linear ? triesConsumed : 1;
 	const factorX = factor ** (Math.max(1, triesConsumed + 1) - 1);
 
 	const waitFor = Math.min(waitMax, waitMin * randomX * linearX * factorX);
-	
+
 	return Math.min(waitFor, timeRemaining);
 };
 
-export const handleWait = async (
+export const handleWaitTime = async (
 	waitTime: number,
-	signal: AbortSignal| null,
+	signal: AbortSignal | null,
 ) => {
 	if (waitTime > 0) {
 		await new Promise<void>((resolve, reject) => {
