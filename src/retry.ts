@@ -3,56 +3,111 @@ import type {
 	RetryFailedResult,
 	RetryOkResult,
 	RetryOptions,
+	SealedOptions,
 } from "./types";
-import { onFail, validateNumericOption, validateTries } from "./utils";
+import {
+	getWaitTime,
+	handleError,
+	handleTimeLimit,
+	handleTries,
+	handleWait,
+	validateNumericOption,
+} from "./utils";
 
 /**
- * @param onTry - main callback
- * @param options.tries - tries; 0 === try until no error
- * @param options.delay - delay between attempts
- * @param options.exponential - use wait(delay*attempt) instead of wait(delay)
- * @param options.onCatch - callback to call on every catch
+ * @param onTry - main function to be retried
+ * @param options - @see RetryOptions
  * @returns @see RetryOkResult @see RetryFailedResult
  */
 export const retry = async <Result>(
 	onTry: (att: number, ...args: unknown[]) => Promise<Result> | Result,
 	options: RetryOptions = {},
 ): Promise<RetryOkResult<Result> | RetryFailedResult> => {
-	options.tries ??= 5;
-	options.delay ??= 100;
-	options.exponent ??= 1;
-	options.limit ??= Number.POSITIVE_INFINITY;
-	options.skipSameErrorCheck ??= false;
+	/** prevent option mutation */
+	const o: SealedOptions = {
+		tries: options.tries ?? 5,
+		timeLimit: options.timeLimit ?? Number.POSITIVE_INFINITY,
+		waitMin: options.waitMin ?? 1000,
+		waitMax: options.waitMax ?? Number.POSITIVE_INFINITY,
+		factor: options.factor ?? 1,
+		linear: options.linear ?? false,
+		random: false,
+		skipSameErrorCheck: options.skipSameErrorCheck || false,
+		onCatch: options.onCatch ?? (() => {}),
+		consumeIf: options.consumeIf ?? (() => true),
+		retryIf: options.retryIf ?? (() => true),
+		signal: options.signal || null,
+	};
 
-	validateTries(options.tries);
-	validateNumericOption("delay", options.delay, { finite: true });
-	validateNumericOption("limit", options.limit, { finite: false });
-	validateNumericOption("exponent", options.exponent, { finite: true });
+	/** validate options */
+	validateNumericOption("tries", o.tries, {
+		finite: false,
+	});
+	validateNumericOption("waitMin", o.waitMin, {
+		finite: true,
+	});
+	validateNumericOption("waitMax", o.waitMax, {
+		finite: false,
+	});
+	validateNumericOption("timeLimit", o.timeLimit, {
+		finite: false,
+	});
+	validateNumericOption("factor", o.factor, {
+		finite: true,
+	});
 
-	const context: RetryContext = {
+	/** mutable context object */
+	const c: RetryContext = {
 		errors: [],
-		attempt: 0,
+		attempts: 0,
 		triesConsumed: 0,
 		triesLeft: 0,
 		start: performance.now(),
+		end: performance.now(),
 	};
 
-	while (Number.isFinite(options.tries) || context.attempt < options.tries) {
-		context.attempt++;
+	while (!Number.isFinite(o.tries) || c.triesConsumed < o.tries) {
+		c.attempts++;
 
 		try {
-			const result = await onTry(context.attempt);
 			return {
 				ok: true,
-				value: result,
-				context: { ...context, end: performance.now() },
+				value: await onTry(c.attempts),
+				context: { ...c, end: performance.now() },
 			};
-		} catch (error) {
-			onFail(error, context, options);
+		} catch (e) {
+			try {
+				const error = handleError(e, c, o);
+
+				o.signal?.throwIfAborted();
+				handleTries(error, c, o);
+
+				o.signal?.throwIfAborted();
+				const timeRemaining = handleTimeLimit(error, c.start, o.timeLimit);
+
+				o.signal?.throwIfAborted();
+				await o.onCatch(c);
+
+				o.signal?.throwIfAborted();
+				if (!(await o.consumeIf(c))) continue;
+				if (!(await o.retryIf(c))) throw error;
+
+				o.signal?.throwIfAborted();
+				const waitTime = getWaitTime(timeRemaining, c.triesConsumed, o);
+
+				o.signal?.throwIfAborted();
+				await handleWait(waitTime, o.signal);
+
+				c.triesConsumed++;
+			} catch (e) {
+				console.error("caught", e);
+				handleError(e, c, o);
+				break;
+			}
 		}
 	}
 
-	return { ok: false, context: { ...context, end: performance.now() } };
+	return { ok: false, context: { ...c, end: performance.now() } };
 };
 
 export const retryify = <Arguments extends unknown[], Result>(
