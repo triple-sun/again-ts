@@ -34,7 +34,7 @@ import {
  * @param o - @see RetryOptions
  * @returns - @see RetryOkResult @see RetryFailedResult
  */
-export const retry = async <VALUE_TYPE>(
+export const again = async <VALUE_TYPE>(
 	onTry: OnTryFunction<VALUE_TYPE>,
 	o: RetryOptions = {},
 ): Promise<RetryOkResult<VALUE_TYPE> | RetryFailedResult> => {
