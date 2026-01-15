@@ -18,12 +18,12 @@ export class StopRetryError extends Error {
 }
 
 export class ErrorTypeError extends Error {
-		readonly name: typeof ErrorTypeError.name;
+	readonly name: typeof ErrorTypeError.name;
 
-		constructor(e: unknown) {
-			super();
+	constructor(e: unknown) {
+		super();
 
-			this.message = `Expected instanceof Error, got: "${typeof e}"`;
-			this.name = ErrorTypeError.name;
-		}
+		this.message = `Expected instanceof Error, got: "${typeof e}"`;
+		this.name = ErrorTypeError.name;
 	}
+}

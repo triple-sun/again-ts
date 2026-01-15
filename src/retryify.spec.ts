@@ -39,6 +39,7 @@ describe("retryify tests", () => {
 		const res = await instance.retriedMethod();
 		expect(res.ok).toBe(true);
 		if (res.ok) {
-			expect(res.value).toBe("correct")}
+			expect(res.value).toBe("correct");
+		}
 	});
 });

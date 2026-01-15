@@ -39,15 +39,13 @@ export const saveErrorToCtx = (
 	const error = e instanceof StopRetryError ? e.original : e;
 
 	if (o.skipSameErrorCheck) {
-		/** save error to ctx */
-		/** push error to context.errors */
+		/** push unchecked error to context.errors */
 		c.errors.push(error);
 	} else {
+		/** check if our last error was the same as this one */
 		try {
-			/** check if our last error was the same as this one */
 			deepStrictEqual(c.errors[c.errors.length - 1], e);
 		} catch (_err) {
-			/** if not - push */
 			c.errors.push(error);
 		}
 	}
