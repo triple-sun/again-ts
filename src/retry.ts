@@ -38,7 +38,7 @@ export const retry = async <VALUE_TYPE>(
 	onTry: OnTryFunction<VALUE_TYPE>,
 	o: RetryOptions = {},
 ): Promise<RetryOkResult<VALUE_TYPE> | RetryFailedResult> => {
-	o.tries ??= TRIES_DEFAULT;
+	o.tries ||= TRIES_DEFAULT;
 	o.timeMin ??= TIME_MIN_DEFAULT;
 	o.timeMax ??= TIME_MAX_DEFAULT;
 	o.waitMin ??= WAIT_MIN_DEFAULT;
@@ -50,6 +50,7 @@ export const retry = async <VALUE_TYPE>(
 	o.onCatch ??= ON_CATCH_DEFAULT;
 	o.consumeIf ??= BOOL_FN_DEFAULT;
 	o.retryIf ??= BOOL_FN_DEFAULT;
+	o.concurrency ||= 1;
 
 	/** prevent option mutation */
 	Object.freeze(o);
@@ -65,11 +66,15 @@ export const retry = async <VALUE_TYPE>(
 	validateNumericOption("waitMax", o.waitMax, {
 		finite: false,
 	});
-	validateNumericOption("timeLimit", o.timeMax, {
+	validateNumericOption("timeMax", o.timeMax, {
 		finite: false,
 	});
 	validateNumericOption("factor", o.factor, {
 		finite: true,
+	});
+	validateNumericOption("concurrency", o.concurrency, {
+		finite: true,
+		min: 1,
 	});
 
 	/** mutable context object */
@@ -81,12 +86,14 @@ export const retry = async <VALUE_TYPE>(
 		end: performance.now(),
 	};
 
-	while (!Number.isFinite(o.tries) || c.triesConsumed < o.tries) {
+	do {
 		c.attempts++;
 
 		try {
 			o.signal?.throwIfAborted();
-			const value = await onTry(c);
+			const value = await Promise.any(
+				Array.from({ length: o.concurrency }, () => onTry(c)),
+			);
 
 			o.signal?.throwIfAborted();
 			return {
@@ -169,7 +176,7 @@ export const retry = async <VALUE_TYPE>(
 				break;
 			}
 		}
-	}
+	} while (!Number.isFinite(o.tries) || c.triesConsumed < o.tries );
 
 	return { ok: false, ctx: { ...c, end: performance.now() } };
 };

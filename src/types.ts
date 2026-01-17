@@ -1,16 +1,17 @@
 // biome-ignore lint/correctness/noUnusedImports: <used in TSDoc>
 import {
-	TRIES_DEFAULT,
-	TIME_MAX_DEFAULT,
-	TIME_MIN_DEFAULT,
-	WAIT_MAX_DEFAULT,
-	WAIT_MIN_DEFAULT,
+	BOOL_FN_DEFAULT,
+	CONCURRENCY_DEFAULT,
 	FACTOR_DEFAULT,
 	LINEAR_DEFAULT,
+	ON_CATCH_DEFAULT,
 	RANDOM_DEFAULT,
 	SKIP_SAME_ERROR_DEFAULT,
-	ON_CATCH_DEFAULT,
-	BOOL_FN_DEFAULT,
+	TIME_MAX_DEFAULT,
+	TIME_MIN_DEFAULT,
+	TRIES_DEFAULT,
+	WAIT_MAX_DEFAULT,
+	WAIT_MIN_DEFAULT,
 } from "./defaults";
 
 /** Main fn type */
@@ -26,6 +27,18 @@ export type RetryContext = {
 	triesConsumed: number;
 	readonly start: number;
 	end: number;
+};
+
+/** Results */
+export type RetryFailedResult = {
+	readonly ok: false;
+	readonly ctx: Readonly<RetryContext>;
+};
+
+export type RetryOkResult<VALUE_TYPE> = {
+	readonly ok: true;
+	readonly value: Awaited<VALUE_TYPE>;
+	readonly ctx: Readonly<RetryContext>;
 };
 
 /** Initial options object */
@@ -103,16 +116,10 @@ export type RetryOptions = {
 	 * {@link https://developer.mozilla.org/en-US/docs/Web/API/AbortController | AbortController}
 	 */
 	signal?: AbortSignal | undefined;
-};
-
-/** Results */
-export type RetryOkResult<VALUE_TYPE> = {
-	readonly ok: true;
-	readonly value: Awaited<VALUE_TYPE>;
-	readonly ctx: Readonly<RetryContext>;
-};
-
-export type RetryFailedResult = {
-	readonly ok: false;
-	readonly ctx: Readonly<RetryContext>;
+	/**
+	 * Number of concurrent executions per attempt
+	 * Should be >0
+	 * @default CONCURRENCY_DEFAULT
+	 */
+	concurrency?: number;
 };

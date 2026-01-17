@@ -65,14 +65,15 @@ if (result.ok) {
 | `timeMax` | `number` | `Infinity` | Maximum execution time in milliseconds for the entire retry process. |
 | `waitMin` | `number` | `100` | Minimum wait time between attempts in milliseconds. |
 | `waitMax` | `number` | `Infinity` | Maximum wait time between attempts in milliseconds. |
-| `factor` | `number` | `1` | Exponential backoff factor. Logic: `factor ** (triesConsumed - 1)` (after first retry). |
+| `factor` | `number` | `1` | Exponential backoff factor. Logic: `factor ** (triesConsumed - 1)` (after first try). |
 | `linear` | `boolean` | `true` | If true, wait time scales linearly with the attempt number. |
 | `random` | `boolean` | `false` | If true, adds randomization to the wait time. |
 | `skipSameErrorCheck` | `boolean` | `false` | If true, generic errors are collected even if they are identical to the previous one. |
-| `onCatch` | `(ctx) => void` | `-` | Function called when an error is caught, before deciding to retry. |
+| `onCatch` | `(ctx) => void` | `() => {}` | Function called when an error is caught, before deciding to retry. |
 | `retryIf` | `(ctx) => boolean` | `() => true` | Predicate function to determine if a retry should be attempted based on the error/context. |
 | `consumeIf` | `(ctx) => boolean` | `() => true` | Predicate function. If it returns `false`, the attempt is not counted towards `triesConsumed`. |
 | `signal` | `AbortSignal` | `undefined` | AbortSignal to cancel the retry process. |
+| `concurrency` | `number` | `1` | Number of concurrent async executions per attempt |
 
 ### RetryContext
 

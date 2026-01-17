@@ -11,6 +11,10 @@ import {
 import { ErrorTypeError, StopRetryError } from "./errors";
 import type { RetryContext, RetryOptions } from "./types";
 
+export const wait = (duration: number) => {
+	return new Promise((resolve) => setTimeout(resolve, duration));
+};
+
 export const validateNumericOption = (
 	name: Readonly<string>,
 	value: Readonly<number>,
@@ -28,25 +32,52 @@ export const validateNumericOption = (
 	}
 };
 
-export const getError = (e: unknown) =>
-	e instanceof Error ? e : new ErrorTypeError(e);
+export const getError = (e: unknown): Error => {
+	if (!(e instanceof Error)) {
+		return new ErrorTypeError(e);
+	}
+
+	if (e instanceof AggregateError) {
+		for (const innerError of e.errors) {
+			if (!(innerError instanceof Error)) {
+				return new ErrorTypeError(innerError);
+			}
+		}
+	}
+
+	return e;
+};
 
 export const saveErrorToCtx = (
 	e: Readonly<Error>,
 	c: RetryContext,
 	o: Readonly<RetryOptions>,
 ): void => {
-	const error = e instanceof StopRetryError ? e.original : e;
+	const incomingErrors =
+		e instanceof StopRetryError
+			? [e.original]
+			: e instanceof AggregateError
+				? e.errors.map(getError)
+				: [e];
+
+	if (e instanceof AggregateError) {
+		e.errors.forEach((curr, i) => {
+			try {
+				deepStrictEqual(curr, e.errors[i + 1]);
+				e.errors = e.errors.splice(i, 1);
+			} catch (_err) {}
+		});
+	}
 
 	if (o.skipSameErrorCheck) {
-		/** push unchecked error to context.errors */
-		c.errors.push(error);
+		c.errors.push(...incomingErrors);
 	} else {
-		/** check if our last error was the same as this one */
-		try {
-			deepStrictEqual(c.errors[c.errors.length - 1], e);
-		} catch (_err) {
-			c.errors.push(error);
+		for (const e of incomingErrors) {
+			try {
+				deepStrictEqual(e, c.errors[c.errors.length - 1]);
+			} catch (_err) {
+				c.errors.push(e);
+			}
 		}
 	}
 };
