@@ -1,5 +1,8 @@
 # again-ts
 
+[![NPM Version](https://img.shields.io/npm/v/again-ts.svg?style=flat-square)](https://www.npmjs.com/package/again-ts)
+[![NPM Downloads](https://img.shields.io/npm/dt/again-ts.svg?style=flat-square)](https://www.npmjs.com/package/again-ts)
+
 Async function retrying written in typescript.
 
 ## Installation
