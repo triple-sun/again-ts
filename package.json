@@ -1,6 +1,6 @@
 {
 	"name": "again-ts",
-	"version": "0.3.0",
+	"version": "0.3.2",
 	"main": "build/index.js",
 	"scripts": {
 		"test": "jest",
@@ -52,7 +52,7 @@
 			"json",
 			"ts"
 		],
-		"rootDir": "src",
+		"rootDir": "tests",
 		"testRegex": ".*\\.spec\\.ts$",
 		"transform": {
 			"^.+\\.(t|j)s$": "ts-jest"

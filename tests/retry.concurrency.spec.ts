@@ -1,5 +1,5 @@
-import { retry } from "./retry";
-import { wait } from "./utils";
+import { retry } from "../src/retry";
+import { wait } from "../src/utils";
 
 describe("retry concurrency tests", () => {
 	it("should try one onTry by default", async () => {

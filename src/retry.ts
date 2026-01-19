@@ -1,13 +1,15 @@
 import {
 	BOOL_FN_DEFAULT,
+	CONCURRENCY_DEFAULT,
 	FACTOR_DEFAULT,
 	LINEAR_DEFAULT,
 	ON_CATCH_DEFAULT,
 	RANDOM_DEFAULT,
-	SKIP_SAME_ERROR_DEFAULT,
+	SKIP_SAME_ERROR_CHECK_DEFAULT,
 	TIME_MAX_DEFAULT,
 	TIME_MIN_DEFAULT,
 	TRIES_DEFAULT,
+	WAIT_IF_NOT_CONSUMED_DEFAULT,
 	WAIT_MAX_DEFAULT,
 	WAIT_MIN_DEFAULT,
 } from "./defaults";
@@ -24,10 +26,12 @@ import {
 	getTimeRemaining,
 	getTriesLeft,
 	getWaitTime,
-	saveErrorToCtx,
+	saveErrorsToCtx,
 	tryBoolFn,
 	validateNumericOption,
 } from "./utils";
+
+const { now } = performance;
 
 /**
  * @param onTry - main function to be retried
@@ -36,147 +40,154 @@ import {
  */
 export const retry = async <VALUE_TYPE>(
 	onTry: OnTryFunction<VALUE_TYPE>,
-	o: RetryOptions = {},
+	options: RetryOptions = {},
 ): Promise<RetryOkResult<VALUE_TYPE> | RetryFailedResult> => {
-	o.tries ||= TRIES_DEFAULT;
-	o.timeMin ??= TIME_MIN_DEFAULT;
-	o.timeMax ??= TIME_MAX_DEFAULT;
-	o.waitMin ??= WAIT_MIN_DEFAULT;
-	o.waitMax ??= WAIT_MAX_DEFAULT;
-	o.factor ??= FACTOR_DEFAULT;
-	o.linear ??= LINEAR_DEFAULT;
-	o.random ??= RANDOM_DEFAULT;
-	o.skipSameErrorCheck ??= SKIP_SAME_ERROR_DEFAULT;
-	o.onCatch ??= ON_CATCH_DEFAULT;
-	o.consumeIf ??= BOOL_FN_DEFAULT;
-	o.retryIf ??= BOOL_FN_DEFAULT;
-	o.concurrency ||= 1;
+	const opts: Readonly<Required<RetryOptions>> = {
+		tries: TRIES_DEFAULT,
+		timeMin: TIME_MIN_DEFAULT,
+		timeMax: TIME_MAX_DEFAULT,
+		waitMin: WAIT_MIN_DEFAULT,
+		waitMax: WAIT_MAX_DEFAULT,
+		factor: FACTOR_DEFAULT,
+		linear: LINEAR_DEFAULT,
+		random: RANDOM_DEFAULT,
+		skipSameErrorCheck: SKIP_SAME_ERROR_CHECK_DEFAULT,
+		waitIfNotConsumed: WAIT_IF_NOT_CONSUMED_DEFAULT,
+		onCatch: ON_CATCH_DEFAULT,
+		consumeIf: BOOL_FN_DEFAULT,
+		retryIf: BOOL_FN_DEFAULT,
+		concurrency: CONCURRENCY_DEFAULT,
+		signal: null,
+		...options,
+	};
 
 	/** prevent option mutation */
-	Object.freeze(o);
+	Object.freeze(opts);
 
 	/** validate options */
-	validateNumericOption("tries", o.tries, {
+	validateNumericOption("tries", opts.tries, {
 		finite: false,
 		min: 1,
 	});
-	validateNumericOption("waitMin", o.waitMin, {
+	validateNumericOption("waitMin", opts.waitMin, {
 		finite: true,
 	});
-	validateNumericOption("waitMax", o.waitMax, {
+	validateNumericOption("waitMax", opts.waitMax, {
 		finite: false,
 	});
-	validateNumericOption("timeMax", o.timeMax, {
+	validateNumericOption("timeMax", opts.timeMax, {
 		finite: false,
 	});
-	validateNumericOption("factor", o.factor, {
+	validateNumericOption("factor", opts.factor, {
 		finite: true,
 	});
-	validateNumericOption("concurrency", o.concurrency, {
+	validateNumericOption("concurrency", opts.concurrency, {
 		finite: true,
 		min: 1,
 	});
 
 	/** mutable context object */
-	const c: RetryContext = {
+	const ctx: RetryContext = {
 		errors: [],
 		attempts: 0,
 		triesConsumed: 0,
-		start: performance.now(),
-		end: performance.now(),
+		start: now(),
+		end: now(),
 	};
 
-	do {
-		c.attempts++;
+	while (!Number.isFinite(opts.tries) || ctx.triesConsumed < opts.tries) {
+		ctx.attempts++;
 
 		try {
-			o.signal?.throwIfAborted();
+			opts.signal?.throwIfAborted();
 			const value = await Promise.any(
-				Array.from({ length: o.concurrency }, () => onTry(c)),
+				Array.from({ length: opts.concurrency }, async () => await onTry(ctx)),
 			);
 
-			o.signal?.throwIfAborted();
+			opts.signal?.throwIfAborted();
 			return {
 				ok: true,
 				value,
-				ctx: { ...c, end: performance.now() },
+				ctx: { ...ctx, end: performance.now() },
 			};
 		} catch (onTryErr) {
 			/** try so we can abort by throwing errors */
 			try {
-				const e = getError(onTryErr);
+				const err = getError(onTryErr);
 
 				/** save error first so retryIf/consumeIf errors come later */
-				saveErrorToCtx(e, c, o);
+				saveErrorsToCtx(err, ctx.errors, opts);
 
-				if (e instanceof StopRetryError) {
-					throw e.original;
-				}
+				/** stop if we receive stop retry error */
+				const stopError = ctx.errors.find((e) => e instanceof StopRetryError);
+				if (stopError) throw stopError.original;
 
-				o.signal?.throwIfAborted();
-				const triesLeft = getTriesLeft(c, o.tries);
+				opts.signal?.throwIfAborted();
+				const triesLeft = getTriesLeft(ctx, opts.tries);
 
-				o.signal?.throwIfAborted();
-				const timeRemaining = getTimeRemaining(c.start, o.timeMax);
+				opts.signal?.throwIfAborted();
+				const timeRemaining = getTimeRemaining(ctx.start, opts.timeMax, now());
 
-				o.signal?.throwIfAborted();
-				await o.onCatch(c);
+				opts.signal?.throwIfAborted();
+				await opts.onCatch(ctx);
 
-				o.signal?.throwIfAborted();
-				const shouldConsume = await tryBoolFn(o.consumeIf, c, o);
+				opts.signal?.throwIfAborted();
+				const shouldConsume = await tryBoolFn(opts.consumeIf, ctx, opts);
 
-				if (timeRemaining <= 0 || triesLeft <= 0) {
-					throw e;
-				}
+				/** handle time and tries limits */
+				if (timeRemaining <= 0 || triesLeft <= 0) throw err;
 
-				if (e instanceof ErrorTypeError) {
-					if (shouldConsume) {
-						throw e;
-					}
-
-					o.signal?.throwIfAborted();
+				/** stop if we receive error type error */
+				const typeError = ctx.errors.find((e) => e instanceof ErrorTypeError);
+				if (typeError) {
+					if (shouldConsume) throw typeError;
+					opts.signal?.throwIfAborted();
 					continue;
 				}
 
-				o.signal?.throwIfAborted();
-				if (!(await tryBoolFn(o.retryIf, c, o))) {
-					throw c.errors[c.errors.length - 1];
+				/** cal */
+				opts.signal?.throwIfAborted();
+				if (!(await tryBoolFn(opts.retryIf, ctx, opts))) {
+					throw ctx.errors[ctx.errors.length - 1];
 				}
 
-				o.signal?.throwIfAborted();
-				if (!shouldConsume) {
-					continue;
-				}
+				/** do not counsume or delay if shouldn't */
+				opts.signal?.throwIfAborted();
+				if (!shouldConsume && !opts.waitIfNotConsumed) continue;
 
-				o.signal?.throwIfAborted();
-				const waitTime = getWaitTime(timeRemaining, c.triesConsumed, o);
+				/** get wait time */
+				opts.signal?.throwIfAborted();
+				const waitTime = getWaitTime(opts, timeRemaining, ctx.triesConsumed);
 
-				o.signal?.throwIfAborted();
+				opts.signal?.throwIfAborted();
 				if (waitTime > 0) {
+					let timeout: NodeJS.Timeout;
 					await new Promise<void>((resolve, reject) => {
 						const onAbort = () => {
-							clearTimeout(timeoutToken);
-							o.signal?.removeEventListener("abort", onAbort);
-							reject(o.signal?.reason);
+							clearTimeout(timeout);
+							opts.signal?.removeEventListener("abort", onAbort);
+							reject(opts.signal?.reason);
 						};
 
-						const timeoutToken = setTimeout(() => {
-							o.signal?.removeEventListener("abort", onAbort);
+						timeout = setTimeout(() => {
+							opts.signal?.removeEventListener("abort", onAbort);
 							resolve();
 						}, waitTime);
 
-						o.signal?.addEventListener("abort", onAbort, { once: true });
+						opts.signal?.addEventListener("abort", onAbort, { once: true });
 
-						return timeoutToken;
+						return timeout;
+					}).finally(() => {
+						timeout?.unref();
 					});
 				}
 
-				c.triesConsumed++;
-			} catch (_breakError) {
+				if (shouldConsume) ctx.triesConsumed++;
+			} catch (_) {
 				break;
 			}
 		}
-	} while (!Number.isFinite(o.tries) || c.triesConsumed < o.tries );
+	}
 
-	return { ok: false, ctx: { ...c, end: performance.now() } };
+	return { ok: false, ctx: { ...ctx, end: now() } };
 };

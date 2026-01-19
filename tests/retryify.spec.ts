@@ -1,4 +1,4 @@
-import { retryify } from "./retryify";
+import { retryify } from "../src/retryify";
 
 describe("retryify tests", () => {
 	it("should handle retryify correctly", async () => {
