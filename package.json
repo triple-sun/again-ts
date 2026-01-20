@@ -1,16 +1,17 @@
 {
 	"name": "again-ts",
-	"version": "0.3.2",
+	"version": "0.3.7",
+	"description": "Async function retrying written in typescript",
+	"author": "triplesun",
+	"license": "ISC",
 	"main": "build/index.js",
 	"scripts": {
 		"test": "jest",
 		"build": "rimraf build && tsc",
 		"format": "npx @biomejs/biome format ./src --write",
-		"lint": "npx @biomejs/biome lint ./src"
+		"lint": "npx @biomejs/biome lint ./src",
+		"prepare": "husky"
 	},
-	"author": "triplesun",
-	"license": "ISC",
-	"description": "Async function retrying written in typescript",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/triple-sun/again-ts.git"
@@ -41,7 +42,9 @@
 		"@biomejs/biome": "2.3.11",
 		"@types/jest": "^29.5.14",
 		"@types/node": "^22.9.0",
+		"husky": "^9.1.7",
 		"jest": "^29.0.0",
+		"lint-staged": "^15.5.2",
 		"rimraf": "^5.0.10",
 		"ts-jest": "^29.2.5",
 		"typescript": "^5.9.3"
@@ -62,5 +65,10 @@
 		],
 		"coverageDirectory": "../coverage",
 		"testEnvironment": "node"
-	}
+	},
+  "lint-staged": {
+    "*": [
+      "biome check --no-errors-on-unmatched --files-ignore-unknown=true"
+    ]
+  }
 }
