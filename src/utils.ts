@@ -6,15 +6,15 @@ import {
 	LINEAR_DEFAULT,
 	ON_CATCH_DEFAULT,
 	RANDOM_DEFAULT,
+	RETRIES_DEFAULT,
 	SKIP_SAME_ERROR_CHECK_DEFAULT,
 	TIME_MAX_DEFAULT,
 	TIME_MIN_DEFAULT,
-	TRIES_DEFAULT,
 	WAIT_IF_NOT_CONSUMED_DEFAULT,
 	WAIT_MAX_DEFAULT,
 	WAIT_MIN_DEFAULT
 } from "./defaults";
-import { NotAnErrorError, StopError } from "./errors";
+import { ErrorTypeError, StopError } from "./errors";
 import type { InternalRetryOptions, RetryContext, RetryOptions } from "./types";
 
 export const wait = (ms: number) => {
@@ -24,7 +24,7 @@ export const wait = (ms: number) => {
 export const createRetryContext = (): RetryContext => ({
 	errors: [],
 	attempts: 0,
-	triesConsumed: 0,
+	retriesConsumed: 0,
 	start: performance.now(),
 	end: performance.now()
 });
@@ -33,7 +33,7 @@ export const getInternalOptions = (
 	options: RetryOptions
 ): InternalRetryOptions =>
 	Object.freeze({
-		tries: TRIES_DEFAULT,
+		retries: RETRIES_DEFAULT,
 		timeMin: TIME_MIN_DEFAULT,
 		timeMax: TIME_MAX_DEFAULT,
 		waitMin: WAIT_MIN_DEFAULT,
@@ -52,25 +52,24 @@ export const getInternalOptions = (
 	});
 
 export const validateNumericOption = (
-	name: Readonly<string>,
+	key: keyof RetryOptions,
 	value: Readonly<number>,
 	{ finite = true, min = 0 }: { finite?: boolean; min?: number } = {}
 ): void => {
 	if (value === undefined) return;
 	if (typeof value !== "number" || Number.isNaN(value)) {
-		throw new NotAnErrorError(`'${name}' should be a number`);
+		throw new ErrorTypeError(`'${key}' should be a number`);
 	}
 	if (value < min) {
-		throw new RangeError(`'${name}' should be >= ${min}`);
+		throw new RangeError(`'${key}' should be >= ${min}`);
 	}
 	if (finite && !Number.isFinite(value)) {
-		throw new RangeError(`'${name}' should be finite`);
+		throw new RangeError(`'${key}' should be finite`);
 	}
 };
 
 export const validateOptions = (opts: InternalRetryOptions) => {
-	/** validate options */
-	validateNumericOption("tries", opts.tries, {
+	validateNumericOption("retries", opts.retries, {
 		finite: false,
 		min: 1
 	});
@@ -93,7 +92,7 @@ export const validateOptions = (opts: InternalRetryOptions) => {
 };
 
 export const getError = (err: unknown): Error =>
-	err instanceof Error ? err : new NotAnErrorError(err);
+	err instanceof Error ? err : new ErrorTypeError(err);
 
 export const saveErrorsToContext = (
 	err: Readonly<Error>,
@@ -128,10 +127,10 @@ export const saveErrorsToContext = (
 
 export const getTriesLeft = (
 	ctx: RetryContext,
-	tries: Readonly<number>
+	retries: Readonly<number>
 ): Readonly<number> => {
-	if (Number.isFinite(tries)) return Math.max(0, tries - ctx.triesConsumed);
-	return tries;
+	if (!Number.isFinite(retries)) return retries;
+	return Math.max(0, retries - ctx.retriesConsumed);
 };
 
 export const getTimeRemaining = (
@@ -183,12 +182,12 @@ export const onRetryCatch = async (
 	/** save error first so retryIf/consumeIf errors come later */
 	saveErrorsToContext(error, ctx.errors, opts);
 
-	/** stop if we receive stop retry error */
+	/** stop if we receive stop error */
 	const stopError = ctx.errors.find(e => e instanceof StopError);
 	if (stopError) throw stopError.original;
 
 	opts.signal?.throwIfAborted();
-	const triesLeft = getTriesLeft(ctx, opts.tries);
+	const triesLeft = getTriesLeft(ctx, opts.retries);
 
 	opts.signal?.throwIfAborted();
 	const timeRemaining = getTimeRemaining(
@@ -207,7 +206,7 @@ export const onRetryCatch = async (
 	if (timeRemaining <= 0 || triesLeft <= 0) throw error;
 
 	/** stop if we wrong type was thrown */
-	const typeError = ctx.errors.find(e => e instanceof NotAnErrorError);
+	const typeError = ctx.errors.find(e => e instanceof ErrorTypeError);
 	if (typeError) {
 		if (shouldConsume) throw typeError;
 		opts.signal?.throwIfAborted();
@@ -224,7 +223,7 @@ export const onRetryCatch = async (
 
 	/** get wait time */
 	opts.signal?.throwIfAborted();
-	const waitTime = getWaitTime(opts, timeRemaining, ctx.triesConsumed);
+	const waitTime = getWaitTime(opts, timeRemaining, ctx.retriesConsumed);
 
 	opts.signal?.throwIfAborted();
 	if (waitTime > 0) {
@@ -249,5 +248,5 @@ export const onRetryCatch = async (
 		});
 	}
 
-	if (shouldConsume) ctx.triesConsumed++;
+	if (shouldConsume) ctx.retriesConsumed++;
 };

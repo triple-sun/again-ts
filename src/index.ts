@@ -1,4 +1,4 @@
-export { NotAnErrorError, StopError } from "./errors";
+export { ErrorTypeError as NotAnErrorError, StopError } from "./errors";
 
 import { retrySafe } from "./retry-safe";
 import { retryUnsafe } from "./retry-unsafe";

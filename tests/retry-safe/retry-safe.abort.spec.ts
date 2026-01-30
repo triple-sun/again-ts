@@ -29,7 +29,7 @@ describe("retrySafe", () => {
 				throw new Error("fail");
 			},
 			{
-				tries: 5,
+				retries: 5,
 				waitMin: 1000,
 				signal: controller.signal
 			}
@@ -41,7 +41,7 @@ describe("retrySafe", () => {
 
 		const res = await promise;
 		expect(res.ok).toBe(false);
-		expect(res.ctx.errors).toHaveLength(1);
+		expect(res.ctx.errors).toHaveLength(2);
 		expect(res.ctx.errors[0]).toEqual(error);
 	});
 
@@ -58,7 +58,7 @@ describe("retrySafe", () => {
 				throw error;
 			},
 			{
-				tries: 5,
+				retries: 5,
 				waitMin: 10,
 				signal: controller.signal
 			}

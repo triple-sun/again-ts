@@ -13,11 +13,11 @@ describe("retrySafe", () => {
 				await wait(10);
 				throw new Error("try again!");
 			},
-			{ concurrency: CONCURRENCY, tries: TRIES, waitMin: 0 }
+			{ retries: TRIES, waitMin: 0 }
 		);
 
-		expect(res.ctx.attempts).toBe(TRIES);
-		expect(calls).toBe(TRIES * CONCURRENCY);
+		expect(res.ctx.attempts).toBe(TRIES + 1);
+		expect(calls).toBe((TRIES + 1) * CONCURRENCY);
 	});
 
 	it("should try concurrently", async () => {
@@ -32,10 +32,10 @@ describe("retrySafe", () => {
 				if (ctx.attempts !== TRIES * CONCURRENCY) throw new Error("try again!");
 				return "ok";
 			},
-			{ concurrency: CONCURRENCY, tries: TRIES }
+			{ concurrency: CONCURRENCY, retries: TRIES }
 		);
 
-		expect(res.ctx.attempts).toBe(5);
-		expect(calls).toBe(TRIES * CONCURRENCY);
+		expect(res.ctx.attempts).toBe(6);
+		expect(calls).toBe((TRIES + 1) * CONCURRENCY);
 	});
 });

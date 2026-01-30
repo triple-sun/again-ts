@@ -2,32 +2,32 @@ import type { RetryContext } from ".";
 
 export class StopError extends Error {
 	readonly original: Error;
-	constructor(message: string | Error) {
+	constructor(messageOrError: string | Error) {
 		super();
 
-		if (message instanceof Error) {
-			this.original = message;
-			({ message } = message);
+		if (messageOrError instanceof Error) {
+			this.original = messageOrError;
+			this.message = messageOrError.message;
 		} else {
-			this.original = new Error(message);
+			this.message = messageOrError;
+			this.original = new Error(messageOrError);
 			this.original.stack = this.stack;
 		}
 
 		this.name = StopError.name;
-		this.message = message;
 	}
 }
 
-export class NotAnErrorError extends Error {
+export class ErrorTypeError extends Error {
 	constructor(e: unknown) {
 		super();
 		this.message = `Expected instanceof Error, got: "${typeof e}"`;
-		this.name = NotAnErrorError.name;
+		this.name = ErrorTypeError.name;
 	}
 }
 
 export class RetryFailedError extends Error {
-	ctx: RetryContext;
+	readonly ctx: RetryContext;
 
 	constructor(ctx: Readonly<RetryContext>) {
 		super();

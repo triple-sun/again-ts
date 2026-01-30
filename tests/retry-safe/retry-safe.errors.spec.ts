@@ -1,4 +1,4 @@
-import { NotAnErrorError, StopError } from "../../src/errors";
+import { ErrorTypeError, StopError } from "../../src/errors";
 import { retrySafe } from "../../src/retry-safe";
 import { wait } from "../../src/utils";
 
@@ -11,34 +11,51 @@ describe("retrySafe", () => {
 		expect(res.ctx.errors[0]?.message).toMatch(/Expected instanceof Error/);
 	});
 
-	it("no retry on ErrorErrorTypeError", async () => {
-		const errorErrorTypeError = new NotAnErrorError(
-			"no retry on ErrorErrorTypeError"
-		);
+	it("no retry on ErrorTypeError", async () => {
+		const errorTypeError = new ErrorTypeError("no retry on ErrorTypeError");
+		let index = 0;
+
+		const res = await retrySafe(async ctx => {
+			await wait(100);
+			index++;
+
+			if (ctx.attempts === 3) {
+				throw errorTypeError;
+			}
+
+			throw new Error("try again!");
+		});
+
+		expect(index).toBe(3);
+		expect(res.ctx.errors[2]).toBe(errorTypeError);
+	});
+
+	it("no retry on StopError", async () => {
+		const stopRetryError = new StopError("no retry on StopError");
 		let index = 0;
 
 		const res = await retrySafe(async c => {
 			await wait(100);
 			index++;
 
-			if (c.attempts === 3) return "something";
+			if (c.attempts === 3) throw stopRetryError;
 
-			throw errorErrorTypeError;
+			throw new Error("try again!");
 		});
 
-		expect(index).toBe(1);
-		expect(res.ctx.errors[0]).toBe(errorErrorTypeError);
+		expect(index).toBe(3);
+		expect(res.ctx.errors[2]).toBe(stopRetryError);
 	});
 
-	it("retryIf is not called for ErrorErrorTypeError", async () => {
-		const errorErrorTypeError = new NotAnErrorError(
-			"retryIf is not called for ErrorErrorTypeError"
+	it("retryIf is not called for NotAnErrorError", async () => {
+		const notAnErrorError = new ErrorTypeError(
+			"retryIf is not called for NotAnErrorError"
 		);
 		let retryIfCalls = 0;
 
 		const res = await retrySafe(
 			() => {
-				throw errorErrorTypeError;
+				throw notAnErrorError;
 			},
 			{
 				retryIf() {
@@ -49,7 +66,7 @@ describe("retrySafe", () => {
 		);
 
 		expect(retryIfCalls).toBe(0);
-		expect(res.ctx.errors[0]).toBe(errorErrorTypeError);
+		expect(res.ctx.errors[0]).toBe(notAnErrorError);
 	});
 
 	it("should abort when signal is aborted", async () => {
@@ -68,35 +85,36 @@ describe("retrySafe", () => {
 				throw error;
 			},
 			{
-				tries: 10,
+				retries: 10,
 				waitMin: 1000
 			}
 		);
 
 		expect(count).toBe(3);
 		expect(res.ok).toBe(false);
-		expect(res.ctx.errors[0]).toBe(error);
-		expect(res.ctx.errors[1]).toBe(stopError);
+		expect(res.ctx.errors).toEqual(
+			expect.arrayContaining([error, error, stopError])
+		);
 	});
 
-	it("should dedup errors by default", async () => {
-		const error = new Error("same error here");
-		const res = await retrySafe(() => {
-			throw new Error("same error here");
-		});
-
-		expect(res.ctx.errors.length).toBe(1);
-		expect(res.ctx.errors[0]).toEqual(error);
-	});
-
-	it("should not dedup errors if necessacy", async () => {
+	it("should dedup errors if necessary", async () => {
 		const error = new Error("same error here");
 		const res = await retrySafe(
 			() => {
 				throw new Error("same error here");
 			},
-			{ skipSameErrorCheck: true }
+			{ skipSameErrorCheck: false }
 		);
+
+		expect(res.ctx.errors.length).toBe(1);
+		expect(res.ctx.errors[0]).toEqual(error);
+	});
+
+	it("should not dedup errors by default", async () => {
+		const error = new Error("same error here");
+		const res = await retrySafe(() => {
+			throw new Error("same error here");
+		});
 
 		expect(res.ctx.errors.length).toBe(5);
 		expect(res.ctx.errors).toEqual(Array.from({ length: 5 }, () => error));

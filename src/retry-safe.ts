@@ -23,7 +23,10 @@ export const retrySafe = async <VALUE_TYPE>(
 	const ctx = createRetryContext();
 
 	/** spin! */
-	while (!Number.isFinite(opts.tries) || ctx.triesConsumed < opts.tries) {
+	while (
+		!Number.isFinite(opts.retries) ||
+		ctx.retriesConsumed <= opts.retries
+	) {
 		ctx.attempts++;
 
 		try {

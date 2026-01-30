@@ -36,7 +36,7 @@ describe("retrySafe", () => {
 	});
 
 	it("should try set number of times", async () => {
-		const TRIES = 5;
+		const RETRIES = 5;
 		const MAX_TRIES = 15;
 
 		const res = await retrySafe(
@@ -44,11 +44,14 @@ describe("retrySafe", () => {
 				if (c.attempts === MAX_TRIES) return;
 				throw new Error(`Error ${c.attempts}`);
 			},
-			{ tries: TRIES }
+			{ retries: RETRIES }
 		);
 
 		expect(res.ok).toBe(false);
-		expect(res.ctx.attempts).toBe(TRIES);
+		expect(res.ctx.attempts).toBe(RETRIES + 1);
+		expect(res.ctx.errors).toEqual(
+			expect.arrayContaining([new Error(`Error 5`)])
+		);
 	});
 
 	it("should try infinite number of times", async () => {
@@ -65,7 +68,7 @@ describe("retrySafe", () => {
 
 				throw new Error(`Error ${c.attempts}`);
 			},
-			{ tries: Number.POSITIVE_INFINITY }
+			{ retries: Number.POSITIVE_INFINITY }
 		);
 
 		expect(res.ok).toBe(false);

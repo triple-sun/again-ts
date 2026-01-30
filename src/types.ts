@@ -24,7 +24,7 @@ export type RetryResult<VALUE_TYPE> =
 export interface RetryContext {
 	errors: Error[];
 	attempts: number;
-	triesConsumed: number;
+	retriesConsumed: number;
 	readonly start: number;
 	end: number;
 }
@@ -32,11 +32,12 @@ export interface RetryContext {
 /** Initial options object */
 export interface RetryOptions {
 	/**
-	 * try this amount of times (includint 1st attempt);
-	 * Infinity === try until no error
-	 * @default TRIES_DEFAULT
+	 * @description Retry this amount of times (not including 1st attempt)
+	 *  Infinity === try indefinetely
+	 * @default RETRIES_DEFAULT
 	 */
-	readonly tries?: number;
+	retries?: number;
+
 	/**
 	 * NOT IMPLEMENTED
 	 * @todo: implement :)
@@ -44,50 +45,59 @@ export interface RetryOptions {
 	 * @default TIME_MIN_DEFAULT
 	 */
 	readonly timeMin?: number;
+
 	/**
 	 * limit execution time by ms
 	 * @default TIME_MAX_DEFAULT
 	 */
 	readonly timeMax?: number;
+
 	/**
 	 * set min wait time between attempts
 	 * overridden by time remaining
 	 * @default WAIT_MIN_DEFAULT
 	 */
 	readonly waitMin?: number;
+
 	/**
 	 * max wait between attempts
 	 * overrides waitMin if waitMax<waitMin
 	 * @default WAIT_MAX_DEFAULT
 	 */
 	readonly waitMax?: number;
+
 	/**
 	 * multiply waitTime by exponent**triesConsumed
 	 * @default FACTOR_DEFAULT
 	 */
 	readonly factor?: number;
+
 	/**
 	 * multply delay by attempt
 	 * @default LINEAR_DEFAULT
 	 */
 	readonly linear?: boolean;
+
 	/**
 	 * randomize time between tries
 	 * @default RANDOM_DEFAULT
 	 */
 	readonly random?: boolean;
+
 	/**
 	 * allow continuous saving of
 	 * multiple instances of same error to ctx.errors
 	 * @default SKIP_SAME_ERROR_CHECK_DEFAULT
 	 */
 	readonly skipSameErrorCheck?: boolean;
+
 	/**
 	 * allow continuous saving of
 	 * multiple instances of same error to ctx.errors
 	 * @default SKIP_SAME_ERROR_CHECK_DEFAULT
 	 */
 	readonly waitIfNotConsumed?: boolean;
+
 	/**
 	 * function to call on catch
 	 * @default ON_CATCH_DEFAULT
@@ -95,6 +105,7 @@ export interface RetryOptions {
 	readonly onCatch?: (
 		context: Readonly<RetryContext>
 	) => Promise<unknown> | unknown;
+
 	/**
 	 * will not increment triesConsumed by 1
 	 * if consumeIf() returns false or throws
@@ -103,6 +114,7 @@ export interface RetryOptions {
 	readonly consumeIf?: (
 		context: Readonly<RetryContext>
 	) => Promise<boolean> | boolean;
+
 	/**
 	 * will not retry if retryIf()
 	 * returns false or throws
@@ -111,6 +123,7 @@ export interface RetryOptions {
 	readonly retryIf?: (
 		context: Readonly<RetryContext>
 	) => Promise<boolean> | boolean;
+
 	/**
 	 * You can use abort conroller to cancel execution
 	 * {@link https://developer.mozilla.org/en-US/docs/Web/API/AbortController | AbortController}
@@ -124,4 +137,4 @@ export interface RetryOptions {
 	readonly concurrency?: number;
 }
 
-export type InternalRetryOptions = Required<Readonly<RetryOptions>>;
+export type InternalRetryOptions = Readonly<Required<RetryOptions>>;

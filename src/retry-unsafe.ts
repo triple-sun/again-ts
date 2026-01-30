@@ -19,14 +19,17 @@ export const retryUnsafe = async <VALUE_TYPE>(
 	const ctx = createRetryContext();
 
 	/** spin! */
-	while (!Number.isFinite(opts.tries) || ctx.triesConsumed <= opts.tries) {
+	while (
+		!Number.isFinite(opts.retries) ||
+		ctx.retriesConsumed <= opts.retries
+	) {
 		ctx.attempts++;
 
 		try {
 			opts.signal?.throwIfAborted();
 			// biome-ignore lint/performance/noAwaitInLoops: <should run in queue>
 			const value = await Promise.any(
-				Array.from({ length: opts.concurrency }, () => onTry(ctx))
+				Array.from({ length: opts.concurrency }, async () => await onTry(ctx))
 			);
 
 			opts.signal?.throwIfAborted();

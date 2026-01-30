@@ -2,11 +2,12 @@
 import {
 	FACTOR_DEFAULT,
 	RANDOM_DEFAULT,
+	RETRIES_DEFAULT,
 	TIME_MAX_DEFAULT,
-	TRIES_DEFAULT,
 	WAIT_MAX_DEFAULT
 } from "../src/defaults";
-import { NotAnErrorError, StopError } from "../src/errors";
+import { ErrorTypeError, StopError } from "../src/errors";
+import type { InternalRetryOptions } from "../src/types";
 import {
 	getError,
 	getTimeRemaining,
@@ -22,31 +23,35 @@ import {
 describe("utils", () => {
 	describe("validateNumericOption", () => {
 		it("should pass for valid numbers", () => {
-			expect(() => validateNumericOption("test", 10)).not.toThrow();
-			expect(() => validateNumericOption("test", 0, { min: 0 })).not.toThrow();
+			expect(() => validateNumericOption("factor", 10)).not.toThrow();
 			expect(() =>
-				validateNumericOption("test", Number.POSITIVE_INFINITY, {
+				validateNumericOption("linear", 0, { min: 0 })
+			).not.toThrow();
+			expect(() =>
+				validateNumericOption("random", Number.POSITIVE_INFINITY, {
 					finite: false
 				})
 			).not.toThrow();
 		});
 
 		it("should throw for non-numbers", () => {
-			expect(() => validateNumericOption("test", "10" as any)).toThrow(
-				NotAnErrorError
+			expect(() => validateNumericOption("retries", "10" as any)).toThrow(
+				ErrorTypeError
 			);
-			expect(() => validateNumericOption("test", NaN)).toThrow(NotAnErrorError);
+			expect(() => validateNumericOption("retries", NaN)).toThrow(
+				ErrorTypeError
+			);
 		});
 
 		it("should throw for values below min", () => {
-			expect(() => validateNumericOption("test", 5, { min: 10 })).toThrow(
+			expect(() => validateNumericOption("retries", 5, { min: 10 })).toThrow(
 				RangeError
 			);
 		});
 
 		it("should throw for non-finite values if required", () => {
 			expect(() =>
-				validateNumericOption("test", Number.POSITIVE_INFINITY, {
+				validateNumericOption("retries", Number.POSITIVE_INFINITY, {
 					finite: true
 				})
 			).toThrow(RangeError);
@@ -54,7 +59,7 @@ describe("utils", () => {
 
 		it("should ignore undefined values", () => {
 			expect(() =>
-				validateNumericOption("test", undefined as any)
+				validateNumericOption("retries", undefined as any)
 			).not.toThrow();
 		});
 	});
@@ -76,13 +81,13 @@ describe("utils", () => {
 
 	describe("getError", () => {
 		it("should return Error as is", () => {
-			const err = new Error("test");
+			const err = new Error("retries");
 			expect(getError(err)).toBe(err);
 		});
 
 		it("should wrap non-Error in ErrorTypeError", () => {
 			const err = getError("string error");
-			expect(err).toBeInstanceOf(NotAnErrorError);
+			expect(err).toBeInstanceOf(ErrorTypeError);
 			expect(err.message).toContain("string");
 		});
 	});
@@ -141,15 +146,15 @@ describe("utils", () => {
 
 	describe("getTriesLeft", () => {
 		it("should return tries left", () => {
-			expect(getTriesLeft({ triesConsumed: 2 } as any, 5)).toBe(3);
+			expect(getTriesLeft({ retriesConsumed: 2 } as any, 5)).toBe(3);
 		});
 		it("should return infinity if tries is infinity", () => {
 			expect(
-				getTriesLeft({ triesConsumed: 100 } as any, Number.POSITIVE_INFINITY)
+				getTriesLeft({ retriesConsumed: 100 } as any, Number.POSITIVE_INFINITY)
 			).toBe(Number.POSITIVE_INFINITY);
 		});
 		it("should return 0 if consumed >= tries", () => {
-			expect(getTriesLeft({ triesConsumed: 5 } as any, 5)).toBe(0);
+			expect(getTriesLeft({ retriesConsumed: 5 } as any, 5)).toBe(0);
 		});
 	});
 
@@ -174,8 +179,8 @@ describe("utils", () => {
 	});
 
 	describe("getWaitTime", () => {
-		const baseOpts = {
-			tries: TRIES_DEFAULT,
+		const baseOpts: InternalRetryOptions = {
+			retries: RETRIES_DEFAULT,
 			timeMin: 0,
 			timeMax: TIME_MAX_DEFAULT,
 			waitMin: 100,
@@ -200,14 +205,14 @@ describe("utils", () => {
 
 		it("should apply linear backoff", () => {
 			const opts = { ...baseOpts, linear: true };
-			expect(getWaitTime(opts, 10000, 0)).toBe(0); // triesConsumed 0 * waitMin
+			expect(getWaitTime(opts, 10000, 0)).toBe(0); // retriesConsumed 0 * waitMin
 			expect(getWaitTime(opts, 10000, 1)).toBe(100);
 			expect(getWaitTime(opts, 10000, 2)).toBe(200);
 		});
 
 		it("should apply exponential factor", () => {
 			const opts = { ...baseOpts, factor: 2 };
-			// factor^(max(1, triesConsumed+1)-1)
+			// factor^(max(1, retriesConsumed+1)-1)
 			// tries=0 -> 2^(1-1) = 1 -> 100
 			expect(getWaitTime(opts, 10000, 0)).toBe(100);
 			// tries=1 -> 2^(2-1) = 2 -> 200

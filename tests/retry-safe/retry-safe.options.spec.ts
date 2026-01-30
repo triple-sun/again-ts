@@ -6,7 +6,7 @@ describe("retrySafe", () => {
 			() => {
 				throw new Error("fail");
 			},
-			{ tries: 10, waitMin: 100, timeMax: 250 }
+			{ retries: 10, waitMin: 100, timeMax: 250 }
 		);
 
 		expect(res.ok).toBe(false);
@@ -21,7 +21,7 @@ describe("retrySafe", () => {
 				throw new Error("fail");
 			},
 			{
-				tries: TRIES,
+				retries: TRIES,
 				consumeIf: c => {
 					if (c.attempts > 2) return true;
 					return false;
@@ -30,8 +30,8 @@ describe("retrySafe", () => {
 		);
 
 		expect(res.ok).toBe(false);
-		expect(res.ctx.triesConsumed).toBe(5);
-		expect(res.ctx.attempts).toBe(7);
+		expect(res.ctx.retriesConsumed).toBe(5);
+		expect(res.ctx.attempts).toBe(8);
 	});
 
 	it("should respect consumeIf even if it throws", async () => {
@@ -42,7 +42,7 @@ describe("retrySafe", () => {
 				throw new Error("fail");
 			},
 			{
-				tries: TRIES,
+				retries: TRIES,
 				consumeIf: c => {
 					if (c.attempts > 2) return true;
 					return false;
@@ -51,21 +51,21 @@ describe("retrySafe", () => {
 		);
 
 		expect(res.ok).toBe(false);
-		expect(res.ctx.triesConsumed).toBe(5);
-		expect(res.ctx.attempts).toBe(7);
+		expect(res.ctx.retriesConsumed).toBe(5);
+		expect(res.ctx.attempts).toBe(8);
 	});
 
-	it("should call onCatch with context", async () => {
+	it("should call onCatch with context on every try (including 1st)", async () => {
 		const onCatch = jest.fn();
 
 		await retrySafe(
 			() => {
 				throw new Error("onCatch onTry test error");
 			},
-			{ tries: 2, waitMin: 1, onCatch }
+			{ retries: 2, waitMin: 1, onCatch }
 		);
 
-		expect(onCatch).toHaveBeenCalledTimes(2);
+		expect(onCatch).toHaveBeenCalledTimes(3);
 		expect(onCatch).toHaveBeenCalledWith(
 			expect.objectContaining({
 				attempts: expect.any(Number),
