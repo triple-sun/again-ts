@@ -1,29 +1,39 @@
-export class StopRetryError extends Error {
-	readonly name: typeof StopRetryError.name;
+import type { RetryContext } from ".";
+
+export class StopError extends Error {
 	readonly original: Error;
-	constructor(message: string | Error) {
+	constructor(messageOrError: string | Error) {
 		super();
 
-		if (message instanceof Error) {
-			this.original = message;
-			({ message } = message);
+		if (messageOrError instanceof Error) {
+			this.original = messageOrError;
+			this.message = `StopError: ${messageOrError.message}`;
 		} else {
-			this.original = new Error(message);
+			this.message = messageOrError;
+			this.original = new Error(messageOrError);
 			this.original.stack = this.stack;
 		}
 
-		this.name = StopRetryError.name;
-		this.message = message;
+		this.name = StopError.name;
 	}
 }
 
 export class ErrorTypeError extends Error {
-	readonly name: typeof ErrorTypeError.name;
-
 	constructor(e: unknown) {
 		super();
-
 		this.message = `Expected instanceof Error, got: "${typeof e}"`;
 		this.name = ErrorTypeError.name;
+	}
+}
+
+export class RetryFailedError extends Error {
+	readonly ctx: RetryContext;
+
+	constructor(ctx: Readonly<RetryContext>) {
+		super();
+
+		this.ctx = ctx;
+		this.name = RetryFailedError.name;
+		this.message = `Retry failed: ${this.ctx.errors[this.ctx.errors.length - 1]}`;
 	}
 }

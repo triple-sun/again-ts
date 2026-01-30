@@ -1,7 +1,8 @@
-import { retryify } from "../src/retryify";
+import { retryify } from "../src";
+import { RetryFailedError } from "../src/errors";
 
-describe("retryify tests", () => {
-	it("should handle retryify correctly", async () => {
+describe("retryifySafe", () => {
+	it("should handle retryifySafe correctly", async () => {
 		const testFn = (i: number) => {
 			if (Math.random() > 0) {
 				return `Got ${i}!`;
@@ -10,7 +11,7 @@ describe("retryify tests", () => {
 			}
 		};
 
-		const retriableTestFn = retryify(testFn, { tries: 5 });
+		const retriableTestFn = retryify("safe", testFn, { retries: 5 });
 		const result = await retriableTestFn(10);
 
 		if (result.ok) {
@@ -25,7 +26,7 @@ describe("retryify tests", () => {
 		class TestClass {
 			readonly value = "correct";
 
-			async method() {
+			method() {
 				if (this.value !== "correct") throw new Error("Wrong context");
 				return this.value;
 			}
@@ -34,12 +35,58 @@ describe("retryify tests", () => {
 		const instance = new TestClass();
 
 		// @ts-expect-error - assigning to explicit property for testing
-		instance.retriedMethod = retryify(instance.method, { tries: 3 });
+		instance.retriedMethod = retryify("safe", instance.method, { retries: 3 });
 		// @ts-expect-error - calling the assigned method
 		const res = await instance.retriedMethod();
 		expect(res.ok).toBe(true);
 		if (res.ok) {
 			expect(res.value).toBe("correct");
 		}
+	});
+});
+
+describe("retryifyUnsafe", () => {
+	it("should handle retryifyUnsafe correctly", async () => {
+		const testFn = (i: number) => {
+			return `Got ${i}!`;
+		};
+
+		const retriableTestFn = retryify("unsafe", testFn, { retries: 5 });
+		const result = await retriableTestFn(10);
+
+		expect(result).toBe(`Got 10!`);
+	});
+
+	it("should handle retryifyUnsafe errors correctly", async () => {
+		const err = new Error("Got error!");
+		const testFn = () => {
+			throw err;
+		};
+
+		try {
+			await retryify("unsafe", testFn, { retries: 5 });
+			// biome-ignore lint/suspicious/noExplicitAny: <testing>
+		} catch (err: any) {
+			expect(err).toBeInstanceOf(RetryFailedError);
+			expect(err.ctx.errors).toEqual(expect.arrayContaining([err]));
+		}
+	});
+
+	it("should preserve 'this' context in retryified methods", async () => {
+		class TestClass {
+			readonly value = "correct";
+
+			method() {
+				if (this.value !== "correct") throw new Error("Wrong context");
+				return this.value;
+			}
+		}
+
+		const instance = new TestClass();
+
+		// @ts-expect-error - assigning to explicit property for testing
+		instance.method = retryify("unsafe", instance.method, { retries: 3 });
+		const res = await instance.method();
+		expect(res).toBe("correct");
 	});
 });

@@ -1,2 +1,4 @@
-lint-staged
-npm run test
+pnpm exec biome format --write ./src
+tsc --noEmit
+pnpm exec lint-staged --allow-empty
+pnpm run test
