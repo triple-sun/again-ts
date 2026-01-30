@@ -93,8 +93,17 @@ export const validateOptions = (opts: InternalRetryOptions) => {
 	});
 };
 
+/** Serializes unknown to Error or ErrorTypeError */
 export const serializeError = (err: unknown): Error =>
 	err instanceof Error ? err : new ErrorTypeError(err);
+
+export const stopIfErrorTypeError = (
+	errors: Error[],
+	shouldConsume: boolean
+): void => {
+	const typeError = errors.find(e => e instanceof ErrorTypeError);
+	if (typeError && shouldConsume) throw typeError;
+};
 
 export const saveErrorsToContext = (
 	err: Readonly<Error>,
@@ -112,6 +121,7 @@ export const saveErrorsToContext = (
 			break;
 		default:
 			incoming.push(err);
+			break;
 	}
 
 	if (opts.skipSameErrorCheck) {
@@ -162,12 +172,12 @@ export const getWaitTime = (
 };
 
 export const tryBoolFn = async (
-	boolFn: (c: Readonly<RetryContext>) => Promise<boolean> | boolean,
+	fn: (c: Readonly<RetryContext>) => Promise<boolean> | boolean,
 	ctx: Readonly<RetryContext>,
 	opts: InternalRetryOptions
 ): Promise<boolean> => {
 	try {
-		return await boolFn(ctx);
+		return await fn(ctx);
 	} catch (e) {
 		saveErrorsToContext(serializeError(e), ctx.errors, opts);
 		return false;
@@ -185,7 +195,7 @@ export const onRetryCatch = async (
 	saveErrorsToContext(error, ctx.errors, opts);
 
 	/** stop if we receive stop error */
-	const stopError = ctx.errors.find(e => e instanceof StopError);
+	const stopError = [error, ...ctx.errors].find(e => e instanceof StopError);
 	if (stopError) throw stopError.original;
 
 	opts.signal?.throwIfAborted();
@@ -208,16 +218,16 @@ export const onRetryCatch = async (
 	if (timeRemaining <= 0 || triesLeft <= 0) throw error;
 
 	/** stop if we wrong type was thrown */
-	const typeError = ctx.errors.find(e => e instanceof ErrorTypeError);
-	if (typeError) {
-		if (shouldConsume) throw typeError;
-		opts.signal?.throwIfAborted();
-		return;
-	}
+	opts.signal?.throwIfAborted();
+	stopIfErrorTypeError([error, ...ctx.errors], shouldConsume);
 
 	/** determine should we retry or not */
 	opts.signal?.throwIfAborted();
 	if (!(await tryBoolFn(opts.retryIf, ctx, opts))) throw error;
+
+	/** stop if we wrong type was thrown */
+	opts.signal?.throwIfAborted();
+	stopIfErrorTypeError([error, ...ctx.errors], shouldConsume);
 
 	/** do not counsume or delay if shouldn't */
 	opts.signal?.throwIfAborted();

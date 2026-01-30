@@ -7,7 +7,7 @@ export class StopError extends Error {
 
 		if (messageOrError instanceof Error) {
 			this.original = messageOrError;
-			this.message = messageOrError.message;
+			this.message = `StopError: ${messageOrError.message}`;
 		} else {
 			this.message = messageOrError;
 			this.original = new Error(messageOrError);

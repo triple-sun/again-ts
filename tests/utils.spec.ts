@@ -232,6 +232,19 @@ describe("utils", () => {
 		it("should not exceed timeRemaining", () => {
 			expect(getWaitTime(baseOpts, 50, 0)).toBe(50);
 		});
+
+		it("should apply random backoff when enabled", () => {
+			const opts = { ...baseOpts, random: true };
+			// Mock Math.random to return a predictable value
+			const originalRandom = Math.random;
+			Math.random = () => 0.5; // randomX will be 1.5
+
+			// waitMin=100, randomX=1.5, linearX=1, factorX=1
+			// wait = 100 * 1.5 * 1 * 1 = 150
+			expect(getWaitTime(opts, 10000, 0)).toBe(150);
+
+			Math.random = originalRandom;
+		});
 	});
 
 	describe("tryBoolFn", () => {
@@ -266,6 +279,181 @@ describe("utils", () => {
 			const error = new ErrorTypeError("wrong type");
 
 			await expect(onRetryCatch(error, ctx, opts)).resolves.toBeUndefined();
+		});
+	});
+	// biome-ignore lint/complexity/noExcessiveLinesPerFunction: <jest!>
+	describe("onRetryCatch", () => {
+		const baseOpts = createInternalOptions({});
+		const createCtx = () => createRetryContext();
+
+		it("should respect consumeIf", async () => {
+			const ctx = createCtx();
+			ctx.attempts = 3;
+			const opts = createInternalOptions({
+				consumeIf: c => c.attempts > 2
+			});
+
+			await onRetryCatch(new Error("fail"), ctx, opts);
+			expect(ctx.retriesConsumed).toBe(1);
+
+			const ctx2 = createCtx();
+			ctx2.attempts = 1;
+			await onRetryCatch(new Error("fail"), ctx2, opts);
+			expect(ctx2.retriesConsumed).toBe(0);
+		});
+
+		it("should respect consumeIf even if it throws", async () => {
+			const ctx = createCtx();
+			ctx.attempts = 3;
+			const opts = createInternalOptions({
+				consumeIf: c => {
+					if (c.attempts > 2) return true;
+					throw new Error("consumeIf error");
+				}
+			});
+
+			await onRetryCatch(new Error("fail"), ctx, opts);
+			expect(ctx.retriesConsumed).toBe(1);
+
+			const ctx2 = createCtx();
+			ctx2.attempts = 1;
+			await onRetryCatch(new Error("fail"), ctx2, opts);
+			expect(ctx2.retriesConsumed).toBe(0);
+			// Error from consumeIf is saved
+			expect(ctx2.errors).toHaveLength(2); // "fail" + "consumeIf error"
+		});
+
+		it("should call onCatch with context", async () => {
+			const onCatch = jest.fn();
+			const ctx = createCtx();
+			const opts = createInternalOptions({ onCatch });
+			const err = new Error("fail");
+
+			await onRetryCatch(err, ctx, opts);
+
+			expect(onCatch).toHaveBeenCalledWith(ctx);
+			expect(ctx.errors[0]).toBe(err);
+		});
+
+		it("should remind to throw only Errors", async () => {
+			const ctx = createCtx();
+			const opts = baseOpts;
+
+			await expect(onRetryCatch("string error", ctx, opts)).rejects.toThrow(
+				ErrorTypeError
+			);
+
+			expect(ctx.errors[0]).toBeInstanceOf(ErrorTypeError);
+			expect(ctx.errors[0]?.message).toMatch(/Expected instanceof Error/);
+		});
+
+		it("should throw type error if retry not allowed (ErrorTypeError)", async () => {
+			const ctx = createCtx();
+			const opts = baseOpts;
+			const err = new ErrorTypeError("fatal");
+
+			await expect(onRetryCatch(err, ctx, opts)).rejects.toBe(err);
+		});
+
+		it("should throw StopError immediately", async () => {
+			const ctx = createCtx();
+			const opts = baseOpts;
+			const original = new Error("StopError");
+			const stopErr = new StopError(original);
+
+			await expect(onRetryCatch(stopErr, ctx, opts)).rejects.toBe(original);
+		});
+
+		it("should not call retryIf for ErrorTypeError", async () => {
+			const retryIf = jest.fn(() => true);
+			const ctx = createCtx();
+			const opts = createInternalOptions({ retryIf });
+			const err = new ErrorTypeError("fatal");
+
+			await expect(onRetryCatch(err, ctx, opts)).rejects.toBe(err);
+			expect(retryIf).not.toHaveBeenCalled();
+		});
+
+		it("should dedup errors if skipSameErrorCheck is false", async () => {
+			const ctx = createCtx();
+			const opts = createInternalOptions({ skipSameErrorCheck: false });
+			const err = new Error("same");
+
+			await onRetryCatch(err, ctx, opts);
+			await onRetryCatch(new Error("same"), ctx, opts); // same message, different instance but deep equal check might pass or fail depending on imp. util test showed simple Error is deduped
+
+			expect(ctx.errors).toHaveLength(1);
+		});
+
+		it("should not dedup errors if skipSameErrorCheck is true", async () => {
+			const ctx = createCtx();
+			const opts = createInternalOptions({ skipSameErrorCheck: true });
+			const err = new Error("same");
+
+			await onRetryCatch(err, ctx, opts);
+			await onRetryCatch(new Error("same"), ctx, opts);
+
+			expect(ctx.errors).toHaveLength(2);
+		});
+
+		it("should throw error when retryIf returns false", async () => {
+			const ctx = createCtx();
+			const error = new Error("fail");
+			const retryIf = jest.fn(() => false);
+			const opts = createInternalOptions({ retryIf });
+
+			await expect(onRetryCatch(error, ctx, opts)).rejects.toBe(error);
+			expect(retryIf).toHaveBeenCalledWith(ctx);
+			expect(ctx.errors).toContain(error);
+		});
+
+		it("should wait when waitIfNotConsumed is true even if shouldConsume is false", async () => {
+			jest.useFakeTimers();
+			const ctx = createCtx();
+			const error = new Error("fail");
+			const opts = createInternalOptions({
+				consumeIf: () => false,
+				waitIfNotConsumed: true,
+				waitMin: 100,
+				retries: 5
+			});
+
+			const promise = onRetryCatch(error, ctx, opts);
+			jest.advanceTimersByTime(100);
+			await promise;
+
+			expect(ctx.retriesConsumed).toBe(0); // Should not consume
+			jest.useRealTimers();
+		});
+
+		it("should not wait when waitIfNotConsumed is false and shouldConsume is false", async () => {
+			const ctx = createCtx();
+			const error = new Error("fail");
+			const opts = createInternalOptions({
+				consumeIf: () => false,
+				waitIfNotConsumed: false,
+				waitMin: 1000,
+				retries: 5
+			});
+
+			// Should return immediately without waiting
+			await onRetryCatch(error, ctx, opts);
+
+			expect(ctx.retriesConsumed).toBe(0); // Should not consume
+		});
+
+		it("should increment retriesConsumed when shouldConsume is true", async () => {
+			const ctx = createCtx();
+			const error = new Error("fail");
+			const opts = createInternalOptions({
+				consumeIf: () => true,
+				waitMin: 0,
+				retries: 5
+			});
+
+			await onRetryCatch(error, ctx, opts);
+
+			expect(ctx.retriesConsumed).toBe(1);
 		});
 	});
 });

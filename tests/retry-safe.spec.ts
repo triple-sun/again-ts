@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: <jest> */
 import { retry } from "../src";
-import { ErrorTypeError, StopError } from "../src/errors";
+import { StopError } from "../src/errors";
 import { wait } from "../src/utils";
 
 describe("retrySafe", () => {
@@ -93,193 +93,35 @@ describe("retrySafe", () => {
 			expect(res.ok).toBe(false);
 			expect(res.ctx.end - res.ctx.start).toBeLessThanOrEqual(255);
 		});
-
-		it("should respect consumeIf", async () => {
-			const TRIES = 5;
-
-			const res = await retry(
-				"safe",
-				() => {
-					throw new Error("fail");
-				},
-				{
-					retries: TRIES,
-					consumeIf: c => {
-						if (c.attempts > 2) return true;
-						return false;
-					}
-				}
-			);
-
-			expect(res.ok).toBe(false);
-			expect(res.ctx.retriesConsumed).toBe(5);
-			expect(res.ctx.attempts).toBe(8);
-		});
-
-		it("should respect consumeIf even if it throws", async () => {
-			const TRIES = 5;
-
-			const res = await retry(
-				"safe",
-				() => {
-					throw new Error("fail");
-				},
-				{
-					retries: TRIES,
-					consumeIf: c => {
-						if (c.attempts > 2) return true;
-						return false;
-					}
-				}
-			);
-
-			expect(res.ok).toBe(false);
-			expect(res.ctx.retriesConsumed).toBe(5);
-			expect(res.ctx.attempts).toBe(8);
-		});
-
-		it("should call onCatch with context on every try (including 1st)", async () => {
-			const onCatch = jest.fn();
-
-			await retry(
-				"safe",
-				() => {
-					throw new Error("onCatch onTry test error");
-				},
-				{ retries: 2, waitMin: 1, onCatch }
-			);
-
-			expect(onCatch).toHaveBeenCalledTimes(3);
-			expect(onCatch).toHaveBeenCalledWith(
-				expect.objectContaining({
-					attempts: expect.any(Number),
-					errors: expect.any(Array)
-				})
-			);
-		});
 	});
 
-	describe("errors", () => {
-		it("should remind to throw only Errors", async () => {
-			const res = await retry("safe", () => {
-				throw "foo";
-			});
+	it("should abort when signal is aborted", async () => {
+		const error = new Error("time to stop");
+		const stopError = new StopError(error);
 
-			expect(res.ctx.errors[0]?.message).toMatch(/Expected instanceof Error/);
-		});
+		let count = 0;
 
-		it("no retry on ErrorTypeError", async () => {
-			const errorTypeError = new ErrorTypeError("no retry on ErrorTypeError");
-			let index = 0;
+		const res = await retry(
+			"safe",
+			async c => {
+				await wait(10);
+				count++;
 
-			const res = await retry("safe", async ctx => {
-				await wait(100);
-				index++;
+				if (c.attempts === 3) throw stopError;
 
-				if (ctx.attempts === 3) {
-					throw errorTypeError;
-				}
+				throw error;
+			},
+			{
+				retries: 10,
+				waitMin: 1000
+			}
+		);
 
-				throw new Error("try again!");
-			});
-
-			expect(index).toBe(3);
-			expect(res.ctx.errors[2]).toBe(errorTypeError);
-		});
-
-		it("no retry on StopError", async () => {
-			const stopRetryError = new StopError("no retry on StopError");
-			let index = 0;
-
-			const res = await retry("safe", async c => {
-				await wait(100);
-				index++;
-
-				if (c.attempts === 3) throw stopRetryError;
-
-				throw new Error("try again!");
-			});
-
-			expect(index).toBe(3);
-			expect(res.ctx.errors[2]).toBe(stopRetryError);
-		});
-
-		it("retryIf is not called for ErrorTypeError", async () => {
-			const notAnErrorError = new ErrorTypeError(
-				"retryIf is not called for ErrorTypeError"
-			);
-
-			let retryIfCalls = 0;
-
-			const res = await retry(
-				"safe",
-				() => {
-					throw notAnErrorError;
-				},
-				{
-					retryIf() {
-						retryIfCalls++;
-						return true;
-					}
-				}
-			);
-
-			expect(retryIfCalls).toBe(0);
-			expect(res.ctx.errors[0]).toBe(notAnErrorError);
-		});
-
-		it("should abort when signal is aborted", async () => {
-			const error = new Error("time to stop");
-			const stopError = new StopError(error);
-
-			let count = 0;
-
-			const res = await retry(
-				"safe",
-				async c => {
-					await wait(10);
-					count++;
-
-					if (c.attempts === 3) throw stopError;
-
-					throw error;
-				},
-				{
-					retries: 10,
-					waitMin: 1000
-				}
-			);
-
-			expect(count).toBe(3);
-			expect(res.ok).toBe(false);
-			expect(res.ctx.errors).toEqual(
-				expect.arrayContaining([error, error, stopError])
-			);
-		});
-
-		it("should dedup errors if necessary", async () => {
-			const error = new Error("same error here");
-			const res = await retry(
-				"safe",
-				() => {
-					throw new Error("same error here");
-				},
-				{ skipSameErrorCheck: false }
-			);
-
-			expect(res.ctx.errors.length).toBe(1);
-			expect(res.ctx.errors[0]).toEqual(error);
-		});
-
-		it("should not dedup errors by default", async () => {
-			const error = new Error("same error here");
-			const res = await retry("safe", () => {
-				throw new Error("same error here");
-			});
-
-			expect(res.ctx.errors.length).toBe(5);
-			expect(res.ctx.errors).toEqual(Array.from({ length: 5 }, () => error));
-		});
+		expect(count).toBe(3);
+		expect(res.ok).toBe(false);
+		expect(res.ctx.errors).toEqual(
+			expect.arrayContaining([error, error, stopError])
+		);
 	});
 
 	describe("concurrency", () => {
@@ -395,5 +237,59 @@ describe("retrySafe", () => {
 			expect(attempts).toBe(2);
 			expect(res.ctx.errors[res.ctx.errors.length - 1]).toEqual(error);
 		});
+	});
+});
+
+describe("retryIf and waitIfNotConsumed integration", () => {
+	beforeAll(() => {
+		jest.useFakeTimers();
+		jest.runAllTimersAsync();
+	});
+
+	afterAll(() => {
+		jest.useRealTimers();
+	});
+
+	it("should stop retrying when retryIf returns false", async () => {
+		let attempts = 0;
+		const res = await retry(
+			"safe",
+			() => {
+				attempts++;
+				throw new Error("fail");
+			},
+			{
+				retries: 10,
+				retryIf: ctx => ctx.attempts < 3
+			}
+		);
+
+		expect(res.ok).toBe(false);
+		expect(attempts).toBe(3); // Stops at 3rd attempt when retryIf returns false
+	});
+
+	it("should wait but not consume retries when consumeIf is false and waitIfNotConsumed is true", async () => {
+		let attempts = 0;
+		const res = await retry(
+			"safe",
+			() => {
+				attempts++;
+				if (attempts < 5) throw new Error("fail");
+				return "success";
+			},
+			{
+				retries: 2,
+				consumeIf: ctx => ctx.attempts > 3,
+				waitIfNotConsumed: true,
+				waitMin: 10
+			}
+		);
+
+		expect(res.ok).toBe(true);
+		if (res.ok) {
+			expect(res.value).toBe("success");
+		}
+		// Should succeed even though retries=2, because first 3 attempts don't consume
+		expect(attempts).toBe(5);
 	});
 });

@@ -1,6 +1,5 @@
 import { retry } from "../src";
-import { RetryFailedError, StopError } from "../src/errors";
-import type { OnTryFunction } from "../src/types";
+import { RetryFailedError } from "../src/errors";
 import { wait } from "../src/utils";
 
 describe("retryUnsafe", () => {
@@ -57,34 +56,6 @@ describe("retryUnsafe", () => {
 		expect(counter).toBe(20);
 	});
 
-	it("should handle StopError to abort retries immediately", async () => {
-		let calls = 0;
-		const stopError = new StopError("stop right now");
-
-		const onTry: OnTryFunction<void> = ctx => {
-			calls++;
-
-			if (ctx.attempts === 2) throw stopError;
-
-			throw new Error("try again!");
-		};
-
-		try {
-			await retry("unsafe", onTry, { retries: 5 });
-			throw new Error("Should have thrown");
-		} catch (err) {
-			// retryUnsafe wraps all failures in RetryFailedError
-			expect(err).toBeInstanceOf(RetryFailedError);
-			if (err instanceof RetryFailedError) {
-				// The original error from StopError is saved to context
-				const lastError = err.ctx.errors[err.ctx.errors.length - 1];
-				expect(lastError).toBeInstanceOf(Error);
-				expect(lastError?.message).toBe("stop right now");
-			}
-		}
-		expect(calls).toEqual(2);
-	});
-
 	it("should support concurrency", async () => {
 		// with concurrency, multiple attempts are fired.
 		// first one to resolve wins.
@@ -124,5 +95,26 @@ describe("retryUnsafe", () => {
 		await expect(retry("unsafe", fn, { retries: 1 })).rejects.toThrow(
 			RetryFailedError
 		);
+	});
+
+	it("should handle synchronous return values", async () => {
+		const fn = jest.fn(() => "sync value");
+
+		const result = await retry("unsafe", fn);
+		expect(result).toBe("sync value");
+		expect(fn).toHaveBeenCalledTimes(1);
+	});
+
+	it("should handle mixed sync success after async failures", async () => {
+		let count = 0;
+		const fn = jest.fn(() => {
+			count++;
+			if (count < 3) throw new Error("fail");
+			return "sync success"; // No Promise
+		});
+
+		const result = await retry("unsafe", fn, { retries: 5, waitMin: 0 });
+		expect(result).toBe("sync success");
+		expect(count).toBe(3);
 	});
 });
