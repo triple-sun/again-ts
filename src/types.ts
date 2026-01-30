@@ -24,7 +24,7 @@ export type RetryResult<VALUE_TYPE> =
 export interface RetryContext {
 	errors: Error[];
 	attempts: number;
-	retriesConsumed: number;
+	retriesTaken: number;
 	readonly start: number;
 	end: number;
 }
@@ -32,7 +32,7 @@ export interface RetryContext {
 /** Initial options object */
 export interface RetryOptions {
 	/**
-	 * @description Retry this amount of times (not including 1st attempt)
+	 * @description retry this amount of times (not including 1st attempt)
 	 *  Infinity === try indefinetely
 	 * @default RETRIES_DEFAULT
 	 */
@@ -47,59 +47,59 @@ export interface RetryOptions {
 	readonly timeMin?: number;
 
 	/**
-	 * limit execution time by ms
+	 * @description limit execution time by ms
 	 * @default TIME_MAX_DEFAULT
 	 */
 	readonly timeMax?: number;
 
 	/**
-	 * set min wait time between attempts
+	 * @description set min wait time between attempts
 	 * overridden by time remaining
 	 * @default WAIT_MIN_DEFAULT
 	 */
 	readonly waitMin?: number;
 
 	/**
-	 * max wait between attempts
+	 * @description max wait between attempts
 	 * overrides waitMin if waitMax<waitMin
 	 * @default WAIT_MAX_DEFAULT
 	 */
 	readonly waitMax?: number;
 
 	/**
-	 * multiply waitTime by exponent**triesConsumed
+	 * @description multiply waitTime by exponent**triesConsumed
 	 * @default FACTOR_DEFAULT
 	 */
 	readonly factor?: number;
 
 	/**
-	 * multply delay by attempt
+	 * @description multply delay by attempt
 	 * @default LINEAR_DEFAULT
 	 */
 	readonly linear?: boolean;
 
 	/**
-	 * randomize time between tries
+	 * @description randomize time between tries
 	 * @default RANDOM_DEFAULT
 	 */
 	readonly random?: boolean;
 
 	/**
-	 * allow continuous saving of
+	 * @description allow continuous saving of
 	 * multiple instances of same error to ctx.errors
 	 * @default SKIP_SAME_ERROR_CHECK_DEFAULT
 	 */
 	readonly skipSameErrorCheck?: boolean;
 
 	/**
-	 * allow continuous saving of
+	 * @description allow continuous saving of
 	 * multiple instances of same error to ctx.errors
 	 * @default WAIT_IF_NOT_CONSUMED_DEFAULT
 	 */
 	readonly waitIfNotConsumed?: boolean;
 
 	/**
-	 * function to call on catch
+	 * @description function to call on catch
 	 * @default ON_CATCH_DEFAULT
 	 */
 	readonly onCatch?: (
@@ -107,7 +107,7 @@ export interface RetryOptions {
 	) => Promise<unknown> | unknown;
 
 	/**
-	 * will not increment triesConsumed by 1
+	 * @description will not increment triesConsumed by 1
 	 * if consumeIf() returns false or throws
 	 * @default BOOL_FN_DEFAULT
 	 */
@@ -116,7 +116,7 @@ export interface RetryOptions {
 	) => Promise<boolean> | boolean;
 
 	/**
-	 * will not retry if retryIf()
+	 * @description will not retry if retryIf()
 	 * returns false or throws
 	 * @default BOOL_FN_DEFAULT
 	 */
@@ -131,11 +131,17 @@ export interface RetryOptions {
 	readonly signal?: Readonly<AbortSignal> | null;
 
 	/**
-	 * Number of concurrent executions per attempt
+	 * @description Number of concurrent executions per attempt
 	 * Should be >0
 	 * @default CONCURRENCY_DEFAULT
 	 */
 	readonly concurrency?: number;
+
+	/**
+	 * @description will be called after waiting
+	 * @default () =>  null
+	 */
+	onTimeout?: (ctx: RetryContext) => void;
 }
 
 export type InternalRetryOptions = Readonly<Required<RetryOptions>>;

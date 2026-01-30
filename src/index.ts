@@ -42,6 +42,10 @@ export async function retry<VALUE_TYPE>(
 			return await retrySafe(onTry, ctx, opts);
 		case "unsafe":
 			return await retryUnsafe(onTry, ctx, opts);
+		default: {
+			const _exhaustive: never = type;
+			throw new Error(`Unexpected type: ${_exhaustive}`);
+		}
 	}
 }
 

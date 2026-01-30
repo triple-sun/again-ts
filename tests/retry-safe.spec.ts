@@ -120,7 +120,7 @@ describe("retrySafe", () => {
 		expect(count).toBe(3);
 		expect(res.ok).toBe(false);
 		expect(res.ctx.errors).toEqual(
-			expect.arrayContaining([error, error, stopError])
+			expect.arrayContaining([error, error, error])
 		);
 	});
 

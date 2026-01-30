@@ -1,3 +1,4 @@
+import type { RetryContext } from "../src";
 import { ErrorTypeError, RetryFailedError, StopError } from "../src/errors";
 
 describe("Error Classes", () => {
@@ -70,10 +71,10 @@ describe("Error Classes", () => {
 
 	describe("RetryFailedError", () => {
 		it("should create RetryFailedError with context", () => {
-			const ctx = {
+			const ctx: RetryContext = {
 				errors: [new Error("error1"), new Error("error2")],
 				attempts: 5,
-				retriesConsumed: 4,
+				retriesTaken: 4,
 				start: 100,
 				end: 200
 			};
@@ -89,10 +90,10 @@ describe("Error Classes", () => {
 		});
 
 		it("should handle context with single error", () => {
-			const ctx = {
+			const ctx: RetryContext = {
 				errors: [new Error("only error")],
 				attempts: 2,
-				retriesConsumed: 1,
+				retriesTaken: 1,
 				start: 100,
 				end: 150
 			};

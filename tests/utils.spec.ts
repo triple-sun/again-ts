@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <testing> */
 import {
 	FACTOR_DEFAULT,
+	ON_TIMEOUT_DEFAULT,
 	RANDOM_DEFAULT,
 	RETRIES_DEFAULT,
 	TIME_MAX_DEFAULT,
@@ -149,15 +150,15 @@ describe("utils", () => {
 
 	describe("getTriesLeft", () => {
 		it("should return tries left", () => {
-			expect(getTriesLeft({ retriesConsumed: 2 } as any, 5)).toBe(3);
+			expect(getTriesLeft({ retriesTaken: 2 } as any, 5)).toBe(3);
 		});
 		it("should return infinity if tries is infinity", () => {
 			expect(
-				getTriesLeft({ retriesConsumed: 100 } as any, Number.POSITIVE_INFINITY)
+				getTriesLeft({ retriesTaken: 100 } as any, Number.POSITIVE_INFINITY)
 			).toBe(Number.POSITIVE_INFINITY);
 		});
 		it("should return 0 if consumed >= tries", () => {
-			expect(getTriesLeft({ retriesConsumed: 5 } as any, 5)).toBe(0);
+			expect(getTriesLeft({ retriesTaken: 5 } as any, 5)).toBe(0);
 		});
 	});
 
@@ -196,6 +197,7 @@ describe("utils", () => {
 			onCatch: () => true,
 			consumeIf: () => true,
 			retryIf: () => true,
+			onTimeout: ON_TIMEOUT_DEFAULT,
 			concurrency: 1,
 			signal: null
 		};
@@ -208,14 +210,14 @@ describe("utils", () => {
 
 		it("should apply linear backoff", () => {
 			const opts = { ...baseOpts, linear: true };
-			expect(getWaitTime(opts, 10000, 0)).toBe(0); // retriesConsumed 0 * waitMin
+			expect(getWaitTime(opts, 10000, 0)).toBe(0); // retriesTaken 0 * waitMin
 			expect(getWaitTime(opts, 10000, 1)).toBe(100);
 			expect(getWaitTime(opts, 10000, 2)).toBe(200);
 		});
 
 		it("should apply exponential factor", () => {
 			const opts = { ...baseOpts, factor: 2 };
-			// factor^(max(1, retriesConsumed+1)-1)
+			// factor^(max(1, retriesTaken+1)-1)
 			// tries=0 -> 2^(1-1) = 1 -> 100
 			expect(getWaitTime(opts, 10000, 0)).toBe(100);
 			// tries=1 -> 2^(2-1) = 2 -> 200
@@ -294,12 +296,12 @@ describe("utils", () => {
 			});
 
 			await onRetryCatch(new Error("fail"), ctx, opts);
-			expect(ctx.retriesConsumed).toBe(1);
+			expect(ctx.retriesTaken).toBe(1);
 
 			const ctx2 = createCtx();
 			ctx2.attempts = 1;
 			await onRetryCatch(new Error("fail"), ctx2, opts);
-			expect(ctx2.retriesConsumed).toBe(0);
+			expect(ctx2.retriesTaken).toBe(0);
 		});
 
 		it("should respect consumeIf even if it throws", async () => {
@@ -313,12 +315,12 @@ describe("utils", () => {
 			});
 
 			await onRetryCatch(new Error("fail"), ctx, opts);
-			expect(ctx.retriesConsumed).toBe(1);
+			expect(ctx.retriesTaken).toBe(1);
 
 			const ctx2 = createCtx();
 			ctx2.attempts = 1;
 			await onRetryCatch(new Error("fail"), ctx2, opts);
-			expect(ctx2.retriesConsumed).toBe(0);
+			expect(ctx2.retriesTaken).toBe(0);
 			// Error from consumeIf is saved
 			expect(ctx2.errors).toHaveLength(2); // "fail" + "consumeIf error"
 		});
@@ -422,7 +424,7 @@ describe("utils", () => {
 			jest.advanceTimersByTime(100);
 			await promise;
 
-			expect(ctx.retriesConsumed).toBe(0); // Should not consume
+			expect(ctx.retriesTaken).toBe(0); // Should not consume
 			jest.useRealTimers();
 		});
 
@@ -439,10 +441,10 @@ describe("utils", () => {
 			// Should return immediately without waiting
 			await onRetryCatch(error, ctx, opts);
 
-			expect(ctx.retriesConsumed).toBe(0); // Should not consume
+			expect(ctx.retriesTaken).toBe(0); // Should not consume
 		});
 
-		it("should increment retriesConsumed when shouldConsume is true", async () => {
+		it("should increment retriesTaken when shouldConsume is true", async () => {
 			const ctx = createCtx();
 			const error = new Error("fail");
 			const opts = createInternalOptions({
@@ -453,7 +455,7 @@ describe("utils", () => {
 
 			await onRetryCatch(error, ctx, opts);
 
-			expect(ctx.retriesConsumed).toBe(1);
+			expect(ctx.retriesTaken).toBe(1);
 		});
 	});
 });

@@ -1,10 +1,10 @@
-import { deepStrictEqual } from "node:assert";
 import {
 	BOOL_FN_DEFAULT,
 	CONCURRENCY_DEFAULT,
 	FACTOR_DEFAULT,
 	LINEAR_DEFAULT,
 	ON_CATCH_DEFAULT,
+	ON_TIMEOUT_DEFAULT,
 	RANDOM_DEFAULT,
 	RETRIES_DEFAULT,
 	SKIP_SAME_ERROR_CHECK_DEFAULT,
@@ -25,7 +25,7 @@ export const wait = (ms: number) => {
 export const createRetryContext = (): RetryContext => ({
 	errors: [],
 	attempts: 0,
-	retriesConsumed: 0,
+	retriesTaken: 0,
 	start: performance.now(),
 	end: performance.now()
 });
@@ -48,6 +48,7 @@ export const createInternalOptions = (
 		onCatch: ON_CATCH_DEFAULT,
 		consumeIf: BOOL_FN_DEFAULT,
 		retryIf: BOOL_FN_DEFAULT,
+		onTimeout: ON_TIMEOUT_DEFAULT,
 		concurrency: CONCURRENCY_DEFAULT,
 		signal: null,
 		...options
@@ -91,6 +92,10 @@ export const validateOptions = (opts: InternalRetryOptions) => {
 		finite: true,
 		min: 1
 	});
+
+	if (Number.isFinite(opts.waitMax) && opts.waitMin > opts.waitMax) {
+		throw new RangeError("'waitMin' cannot be greater than 'waitMax'");
+	}
 };
 
 /** Serializes unknown to Error or ErrorTypeError */
@@ -128,9 +133,11 @@ export const saveErrorsToContext = (
 		ctxErrors.push(...incoming);
 	} else {
 		for (const e of incoming) {
-			try {
-				deepStrictEqual(e, ctxErrors[ctxErrors.length - 1]);
-			} catch (_err) {
+			const isDuplicate =
+				ctxErrors[ctxErrors.length - 1]?.message === e.message &&
+				ctxErrors[ctxErrors.length - 1]?.name === e.name;
+
+			if (!isDuplicate) {
 				ctxErrors.push(e);
 			}
 		}
@@ -142,7 +149,7 @@ export const getTriesLeft = (
 	retries: Readonly<number>
 ): Readonly<number> => {
 	if (!Number.isFinite(retries)) return retries;
-	return Math.max(0, retries - ctx.retriesConsumed);
+	return Math.max(0, retries - ctx.retriesTaken);
 };
 
 export const getTimeRemaining = (
@@ -235,7 +242,7 @@ export const onRetryCatch = async (
 
 	/** get wait time */
 	opts.signal?.throwIfAborted();
-	const waitTime = getWaitTime(opts, timeRemaining, ctx.retriesConsumed);
+	const waitTime = getWaitTime(opts, timeRemaining, ctx.retriesTaken);
 
 	opts.signal?.throwIfAborted();
 	if (waitTime > 0) {
@@ -247,18 +254,16 @@ export const onRetryCatch = async (
 				reject(opts.signal?.reason);
 			};
 
+			opts.signal?.addEventListener("abort", onAbort, { once: true });
+
 			timeout = setTimeout(() => {
 				opts.signal?.removeEventListener("abort", onAbort);
 				resolve();
 			}, waitTime);
-
-			opts.signal?.addEventListener("abort", onAbort, { once: true });
-
-			return timeout;
 		}).finally(() => {
 			timeout?.unref();
 		});
 	}
 
-	if (shouldConsume) ctx.retriesConsumed++;
+	if (shouldConsume) ctx.retriesTaken++;
 };

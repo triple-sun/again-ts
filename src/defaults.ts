@@ -12,3 +12,4 @@ export const CONCURRENCY_DEFAULT = 1;
 
 export const BOOL_FN_DEFAULT = () => true;
 export const ON_CATCH_DEFAULT = () => null;
+export const ON_TIMEOUT_DEFAULT = () => null;

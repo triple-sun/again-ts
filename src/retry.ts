@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/performance/noAwaitInLoops: <should chain promises> */
 import { RetryFailedError } from "./errors";
 import type {
 	InternalRetryOptions,
@@ -14,18 +15,20 @@ export const retrySafe = async <VALUE_TYPE>(
 	opts: InternalRetryOptions
 ): Promise<RetryResult<VALUE_TYPE>> => {
 	/** spin! */
-	while (
-		!Number.isFinite(opts.retries) ||
-		ctx.retriesConsumed <= opts.retries
-	) {
+	while (!Number.isFinite(opts.retries) || ctx.retriesTaken <= opts.retries) {
 		ctx.attempts++;
 
 		try {
 			opts.signal?.throwIfAborted();
-			// biome-ignore lint/performance/noAwaitInLoops: <should run in chain>
-			const value = await Promise.any(
-				Array.from({ length: opts.concurrency }, async () => await onTry(ctx))
-			);
+			const value =
+				opts.concurrency === 1
+					? await onTry(ctx)
+					: await Promise.any(
+							Array.from(
+								{ length: opts.concurrency },
+								async () => await onTry(ctx)
+							)
+						);
 
 			opts.signal?.throwIfAborted();
 			return {
@@ -54,18 +57,21 @@ export const retryUnsafe = async <VALUE_TYPE>(
 	opts: InternalRetryOptions
 ): Promise<VALUE_TYPE> => {
 	/** spin! */
-	while (
-		!Number.isFinite(opts.retries) ||
-		ctx.retriesConsumed <= opts.retries
-	) {
+	while (!Number.isFinite(opts.retries) || ctx.retriesTaken <= opts.retries) {
 		ctx.attempts++;
 
 		try {
 			opts.signal?.throwIfAborted();
-			// biome-ignore lint/performance/noAwaitInLoops: <should not be concurrent>
-			const value = await Promise.any(
-				Array.from({ length: opts.concurrency }, async () => await onTry(ctx))
-			);
+
+			const value =
+				opts.concurrency === 1
+					? await onTry(ctx)
+					: await Promise.any(
+							Array.from(
+								{ length: opts.concurrency },
+								async () => await onTry(ctx)
+							)
+						);
 
 			opts.signal?.throwIfAborted();
 			return value;

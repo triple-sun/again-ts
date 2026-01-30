@@ -33,7 +33,7 @@ describe("retryUnsafe", () => {
 			if (err instanceof RetryFailedError) {
 				expect(err.ctx.errors).toHaveLength(4);
 				expect(err.ctx.errors[0]).toBe(error);
-				expect(err.ctx.retriesConsumed).toBe(3);
+				expect(err.ctx.retriesTaken).toBe(3);
 			}
 		}
 		expect(fn).toHaveBeenCalledTimes(4);
