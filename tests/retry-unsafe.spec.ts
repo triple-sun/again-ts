@@ -1,12 +1,12 @@
-import { RetryFailedError, StopError } from "../../src/errors";
-import { retryUnsafe } from "../../src/retry-unsafe";
-import type { OnTryFunction } from "../../src/types";
-import { wait } from "../../src/utils";
+import { retry } from "../src";
+import { RetryFailedError, StopError } from "../src/errors";
+import type { OnTryFunction } from "../src/types";
+import { wait } from "../src/utils";
 
 describe("retryUnsafe", () => {
 	it("should return result directly on first try", async () => {
 		const fn = jest.fn().mockResolvedValue("success");
-		const result = await retryUnsafe(fn);
+		const result = await retry("unsafe", fn);
 		expect(result).toBe("success");
 		expect(fn).toHaveBeenCalledTimes(1);
 	});
@@ -18,7 +18,7 @@ describe("retryUnsafe", () => {
 			.mockRejectedValueOnce(new Error("fail 2"))
 			.mockResolvedValue("success");
 
-		const result = await retryUnsafe(fn, { retries: 5 });
+		const result = await retry("unsafe", fn, { retries: 5 });
 		expect(result).toBe("success");
 		expect(fn).toHaveBeenCalledTimes(3);
 	});
@@ -28,7 +28,7 @@ describe("retryUnsafe", () => {
 		const fn = jest.fn().mockRejectedValue(error);
 
 		try {
-			await retryUnsafe(fn, { retries: 3, skipSameErrorCheck: true });
+			await retry("unsafe", fn, { retries: 3, skipSameErrorCheck: true });
 		} catch (err) {
 			expect(err).toBeInstanceOf(RetryFailedError);
 			if (err instanceof RetryFailedError) {
@@ -49,7 +49,7 @@ describe("retryUnsafe", () => {
 		});
 
 		// Pass tries: Infinity explicitly since default is 5
-		const result = await retryUnsafe(fn, {
+		const result = await retry("unsafe", fn, {
 			retries: Number.POSITIVE_INFINITY,
 			waitMin: 0
 		});
@@ -70,7 +70,7 @@ describe("retryUnsafe", () => {
 		};
 
 		try {
-			await retryUnsafe(onTry, { retries: 5 });
+			await retry("unsafe", onTry, { retries: 5 });
 			throw new Error("Should have thrown");
 		} catch (err) {
 			// retryUnsafe wraps all failures in RetryFailedError
@@ -98,7 +98,7 @@ describe("retryUnsafe", () => {
 			return "success"; // 3rd succeeds
 		});
 
-		const result = await retryUnsafe(fn, { retries: 1, concurrency: 3 });
+		const result = await retry("unsafe", fn, { retries: 1, concurrency: 3 });
 		expect(result).toBe("success");
 		expect(callCount).toBe(3);
 	});
@@ -110,7 +110,7 @@ describe("retryUnsafe", () => {
 			return "success";
 		});
 
-		const promise = retryUnsafe(fn, { signal: controller.signal });
+		const promise = retry("unsafe", fn, { signal: controller.signal });
 		controller.abort();
 
 		await expect(promise).rejects.toThrow();
@@ -121,7 +121,7 @@ describe("retryUnsafe", () => {
 			throw new Error("sync error");
 		});
 
-		await expect(retryUnsafe(fn, { retries: 1 })).rejects.toThrow(
+		await expect(retry("unsafe", fn, { retries: 1 })).rejects.toThrow(
 			RetryFailedError
 		);
 	});

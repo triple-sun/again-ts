@@ -21,6 +21,7 @@ export const wait = (ms: number) => {
 	return new Promise(resolve => setTimeout(resolve, ms));
 };
 
+/** @description creates retry context◊ */
 export const createRetryContext = (): RetryContext => ({
 	errors: [],
 	attempts: 0,
@@ -29,7 +30,8 @@ export const createRetryContext = (): RetryContext => ({
 	end: performance.now()
 });
 
-export const getInternalOptions = (
+/** @description creates readonly options with defaults */
+export const createInternalOptions = (
 	options: RetryOptions
 ): InternalRetryOptions =>
 	Object.freeze({
@@ -91,7 +93,7 @@ export const validateOptions = (opts: InternalRetryOptions) => {
 	});
 };
 
-export const getError = (err: unknown): Error =>
+export const serializeError = (err: unknown): Error =>
 	err instanceof Error ? err : new ErrorTypeError(err);
 
 export const saveErrorsToContext = (
@@ -106,7 +108,7 @@ export const saveErrorsToContext = (
 			incoming.push(err.original);
 			break;
 		case err instanceof AggregateError:
-			incoming.push(...err.errors.map(getError));
+			incoming.push(...err.errors.map(serializeError));
 			break;
 		default:
 			incoming.push(err);
@@ -167,7 +169,7 @@ export const tryBoolFn = async (
 	try {
 		return await boolFn(ctx);
 	} catch (e) {
-		saveErrorsToContext(getError(e), ctx.errors, opts);
+		saveErrorsToContext(serializeError(e), ctx.errors, opts);
 		return false;
 	}
 };
@@ -177,7 +179,7 @@ export const onRetryCatch = async (
 	ctx: RetryContext,
 	opts: InternalRetryOptions
 ): Promise<void> => {
-	const error = getError(e);
+	const error = serializeError(e);
 
 	/** save error first so retryIf/consumeIf errors come later */
 	saveErrorsToContext(error, ctx.errors, opts);

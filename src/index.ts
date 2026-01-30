@@ -1,11 +1,15 @@
-export { ErrorTypeError as NotAnErrorError, StopError } from "./errors";
+export { ErrorTypeError, StopError } from "./errors";
 
-import { retrySafe } from "./retry-safe";
-import { retryUnsafe } from "./retry-unsafe";
-import { retryifySafe, retryifyUnsafe } from "./retryify";
+import { retrySafe, retryUnsafe } from "./retry";
 import type { OnTryFunction, RetryOptions, RetryResult } from "./types";
+import {
+	createInternalOptions,
+	createRetryContext,
+	validateOptions
+} from "./utils";
 
-export {
+export type {
+	OnTryFunction,
 	RetryContext,
 	RetryFailedResult,
 	RetryOkResult,
@@ -14,47 +18,56 @@ export {
 } from "./types";
 
 export async function retry<VALUE_TYPE>(
-	t: "safe",
+	type: "safe",
 	onTry: OnTryFunction<VALUE_TYPE>,
 	options?: RetryOptions
 ): Promise<RetryResult<VALUE_TYPE>>;
 export async function retry<VALUE_TYPE>(
-	t: "unsafe",
+	type: "unsafe",
 	onTry: OnTryFunction<VALUE_TYPE>,
 	options?: RetryOptions
 ): Promise<VALUE_TYPE>;
-export function retry<VALUE_TYPE>(
-	t: "safe" | "unsafe",
+export async function retry<VALUE_TYPE>(
+	type: "safe" | "unsafe",
 	onTry: OnTryFunction<VALUE_TYPE>,
 	options: RetryOptions = {}
 ): Promise<RetryResult<VALUE_TYPE> | VALUE_TYPE> {
-	switch (t) {
+	const opts = createInternalOptions(options);
+	/** validate */
+	validateOptions(opts);
+	/** mutable context object */
+	const ctx = createRetryContext();
+	switch (type) {
 		case "safe":
-			return retrySafe(onTry, options);
+			return await retrySafe(onTry, ctx, opts);
 		case "unsafe":
-			return retryUnsafe(onTry, options);
+			return await retryUnsafe(onTry, ctx, opts);
 	}
 }
 
 export function retryify<ARGS extends unknown[], VALUE_TYPE>(
-	t: "safe",
-	function_: (...arguments_: ARGS) => Promise<VALUE_TYPE> | VALUE_TYPE,
+	type: "safe",
+	fn_: (...arguments_: ARGS) => Promise<VALUE_TYPE> | VALUE_TYPE,
 	options: Readonly<RetryOptions>
 ): (...arguments_: ARGS) => Promise<RetryResult<VALUE_TYPE>>;
 export function retryify<ARGS extends unknown[], VALUE_TYPE>(
-	t: "unsafe",
-	function_: (...arguments_: ARGS) => Promise<VALUE_TYPE> | VALUE_TYPE,
+	type: "unsafe",
+	fn_: (...arguments_: ARGS) => Promise<VALUE_TYPE> | VALUE_TYPE,
 	options: Readonly<RetryOptions>
 ): (...arguments_: ARGS) => Promise<VALUE_TYPE>;
 export function retryify<ARGS extends unknown[], VALUE_TYPE>(
-	t: "safe" | "unsafe",
-	function_: (...arguments_: ARGS) => Promise<VALUE_TYPE> | VALUE_TYPE,
+	type: "safe" | "unsafe",
+	fn_: (...arguments_: ARGS) => Promise<VALUE_TYPE> | VALUE_TYPE,
 	options: Readonly<RetryOptions>
 ): (...arguments_: ARGS) => Promise<RetryResult<VALUE_TYPE> | VALUE_TYPE> {
-	switch (t) {
+	switch (type) {
 		case "safe":
-			return retryifySafe(function_, options);
+			return function (this: unknown, ...arguments_) {
+				return retry("safe", () => fn_.apply(this, arguments_), options);
+			};
 		case "unsafe":
-			return retryifyUnsafe(function_, options);
+			return function (this: unknown, ...arguments_) {
+				return retry("unsafe", () => fn_.apply(this, arguments_), options);
+			};
 	}
 }

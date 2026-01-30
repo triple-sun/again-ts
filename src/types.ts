@@ -94,7 +94,7 @@ export interface RetryOptions {
 	/**
 	 * allow continuous saving of
 	 * multiple instances of same error to ctx.errors
-	 * @default SKIP_SAME_ERROR_CHECK_DEFAULT
+	 * @default WAIT_IF_NOT_CONSUMED_DEFAULT
 	 */
 	readonly waitIfNotConsumed?: boolean;
 
@@ -129,6 +129,7 @@ export interface RetryOptions {
 	 * {@link https://developer.mozilla.org/en-US/docs/Web/API/AbortController | AbortController}
 	 */
 	readonly signal?: Readonly<AbortSignal> | null;
+
 	/**
 	 * Number of concurrent executions per attempt
 	 * Should be >0

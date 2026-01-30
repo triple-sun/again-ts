@@ -1,5 +1,5 @@
+import { retryify } from "../src";
 import { RetryFailedError } from "../src/errors";
-import { retryifySafe, retryifyUnsafe } from "../src/retryify";
 
 describe("retryifySafe", () => {
 	it("should handle retryifySafe correctly", async () => {
@@ -11,7 +11,7 @@ describe("retryifySafe", () => {
 			}
 		};
 
-		const retriableTestFn = retryifySafe(testFn, { retries: 5 });
+		const retriableTestFn = retryify("safe", testFn, { retries: 5 });
 		const result = await retriableTestFn(10);
 
 		if (result.ok) {
@@ -35,7 +35,7 @@ describe("retryifySafe", () => {
 		const instance = new TestClass();
 
 		// @ts-expect-error - assigning to explicit property for testing
-		instance.retriedMethod = retryifySafe(instance.method, { retries: 3 });
+		instance.retriedMethod = retryify("safe", instance.method, { retries: 3 });
 		// @ts-expect-error - calling the assigned method
 		const res = await instance.retriedMethod();
 		expect(res.ok).toBe(true);
@@ -51,7 +51,7 @@ describe("retryifyUnsafe", () => {
 			return `Got ${i}!`;
 		};
 
-		const retriableTestFn = retryifyUnsafe(testFn, { retries: 5 });
+		const retriableTestFn = retryify("unsafe", testFn, { retries: 5 });
 		const result = await retriableTestFn(10);
 
 		expect(result).toBe(`Got 10!`);
@@ -64,7 +64,7 @@ describe("retryifyUnsafe", () => {
 		};
 
 		try {
-			await retryifyUnsafe(testFn, { retries: 5 });
+			await retryify("unsafe", testFn, { retries: 5 });
 			// biome-ignore lint/suspicious/noExplicitAny: <testing>
 		} catch (err: any) {
 			expect(err).toBeInstanceOf(RetryFailedError);
@@ -85,7 +85,7 @@ describe("retryifyUnsafe", () => {
 		const instance = new TestClass();
 
 		// @ts-expect-error - assigning to explicit property for testing
-		instance.method = retryifyUnsafe(instance.method, { retries: 3 });
+		instance.method = retryify("unsafe", instance.method, { retries: 3 });
 		const res = await instance.method();
 		expect(res).toBe("correct");
 	});

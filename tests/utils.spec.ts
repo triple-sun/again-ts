@@ -9,11 +9,14 @@ import {
 import { ErrorTypeError, StopError } from "../src/errors";
 import type { InternalRetryOptions } from "../src/types";
 import {
-	getError,
+	createInternalOptions,
+	createRetryContext,
 	getTimeRemaining,
 	getTriesLeft,
 	getWaitTime,
+	onRetryCatch,
 	saveErrorsToContext,
+	serializeError,
 	tryBoolFn,
 	validateNumericOption,
 	wait
@@ -82,11 +85,11 @@ describe("utils", () => {
 	describe("getError", () => {
 		it("should return Error as is", () => {
 			const err = new Error("retries");
-			expect(getError(err)).toBe(err);
+			expect(serializeError(err)).toBe(err);
 		});
 
 		it("should wrap non-Error in ErrorTypeError", () => {
-			const err = getError("string error");
+			const err = serializeError("string error");
 			expect(err).toBeInstanceOf(ErrorTypeError);
 			expect(err.message).toContain("string");
 		});
@@ -251,6 +254,18 @@ describe("utils", () => {
 				)
 			).resolves.toBe(false);
 			expect(ctx.errors).toHaveLength(1);
+		});
+	});
+	describe("onRetryCatch", () => {
+		it("should throw ErrorTypeError immediately if shouldConsume is false", async () => {
+			const ctx = createRetryContext();
+			const opts = createInternalOptions({
+				retries: 3,
+				consumeIf: () => false
+			});
+			const error = new ErrorTypeError("wrong type");
+
+			await expect(onRetryCatch(error, ctx, opts)).resolves.toBeUndefined();
 		});
 	});
 });
