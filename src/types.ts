@@ -135,7 +135,7 @@ export interface RetryOptions {
 	 * @description will be called after waiting
 	 * @default () =>  null
 	 */
-	onTimeout?: (ctx: RetryContext) => void;
+	onTimeout?: (ctx: Readonly<RetryContext>) => void;
 }
 
 export type InternalRetryOptions = Readonly<Required<RetryOptions>>;

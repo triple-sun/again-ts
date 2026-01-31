@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-01-31
+
+### Fixed
+
+- **Restored default value of `skipSameErrorCheck` to `false`**
+  - By default, retry will now check for consecutive duplicate errors
+  - This provides better error handling by default and prevents infinite retries on the same error
+
+- **Improved error type checking performance**
+  - Optimized `stopIfErrorTypeError` to check current error first before searching error array
+  - Reduces unnecessary array iterations when error type is incorrect
+
+- **Optimized StopError detection**
+  - Current error is now checked for `StopError` instance before searching error history
+  - Improves performance by avoiding array search in most cases
+
+- **Fixed potential race condition in timeout cleanup**
+  - Added undefined checks before calling `clearTimeout` and `timeout.unref()`
+
+### Changed
+
+- **Enhanced type safety for readonly parameters**
+  - `onTimeout` callback now receives `Readonly<RetryContext>`
+  - Internal utility functions now use `Readonly` for parameters that shouldn't be mutated
+
 ## [1.0.3] - 2026-01-31
 
 ### Fixed

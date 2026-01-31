@@ -208,7 +208,7 @@ describe("retrySafe", () => {
 
 			const res = await promise;
 			expect(res.ok).toBe(false);
-			expect(res.ctx.errors).toHaveLength(2);
+			expect(res.ctx.errors).toHaveLength(1);
 			expect(res.ctx.errors[0]).toEqual(error);
 		});
 

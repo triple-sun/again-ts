@@ -5,7 +5,7 @@ export const WAIT_MAX_DEFAULT = Number.POSITIVE_INFINITY;
 export const FACTOR_DEFAULT = 1;
 export const LINEAR_DEFAULT = true;
 export const RANDOM_DEFAULT = false;
-export const SKIP_SAME_ERROR_CHECK_DEFAULT = true;
+export const SKIP_SAME_ERROR_CHECK_DEFAULT = false;
 export const WAIT_IF_NOT_CONSUMED_DEFAULT = false;
 export const CONCURRENCY_DEFAULT = 1;
 

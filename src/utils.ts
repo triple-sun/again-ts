@@ -101,10 +101,14 @@ export const serializeError = (err: unknown): Error =>
 	err instanceof Error ? err : new ErrorTypeError(err);
 
 export const stopIfErrorTypeError = (
-	errors: Error[],
-	shouldConsume: boolean
+	error: Readonly<Error>,
+	ctxErrors: Readonly<Error[]>,
+	shouldConsume: Readonly<boolean>
 ): void => {
-	const typeError = errors.find(e => e instanceof ErrorTypeError);
+	const typeError =
+		error instanceof TypeError
+			? error
+			: ctxErrors.find(e => e instanceof ErrorTypeError);
 	if (typeError && shouldConsume) throw typeError;
 };
 
@@ -143,7 +147,7 @@ export const saveErrorsToContext = (
 };
 
 export const getTriesLeft = (
-	ctx: RetryContext,
+	ctx: Readonly<RetryContext>,
 	retries: Readonly<number>
 ): Readonly<number> => {
 	if (!Number.isFinite(retries)) return retries;
@@ -200,7 +204,10 @@ export const onRetryCatch = async (
 	saveErrorsToContext(error, ctx.errors, opts);
 
 	/** stop if we receive stop error */
-	const stopError = [error, ...ctx.errors].find(e => e instanceof StopError);
+	const stopError =
+		error instanceof StopError
+			? error
+			: ctx.errors.find(e => e instanceof StopError);
 	if (stopError) throw stopError.original;
 
 	opts.signal?.throwIfAborted();
@@ -221,7 +228,7 @@ export const onRetryCatch = async (
 
 	/** stop if we wrong type was thrown */
 	opts.signal?.throwIfAborted();
-	stopIfErrorTypeError([error, ...ctx.errors], shouldConsume);
+	stopIfErrorTypeError(error, ctx.errors, shouldConsume);
 
 	/** determine should we retry or not */
 	opts.signal?.throwIfAborted();
@@ -229,7 +236,7 @@ export const onRetryCatch = async (
 
 	/** stop if we wrong type was thrown */
 	opts.signal?.throwIfAborted();
-	stopIfErrorTypeError([error, ...ctx.errors], shouldConsume);
+	stopIfErrorTypeError(error, ctx.errors, shouldConsume);
 
 	/** do not counsume or delay if shouldn't */
 	opts.signal?.throwIfAborted();
@@ -244,7 +251,7 @@ export const onRetryCatch = async (
 		let timeout: NodeJS.Timeout;
 		await new Promise<void>((resolve, reject) => {
 			const onAbort = () => {
-				clearTimeout(timeout);
+				if (timeout !== undefined) clearTimeout(timeout);
 				opts.signal?.removeEventListener("abort", onAbort);
 				reject(opts.signal?.reason);
 			};
@@ -257,7 +264,7 @@ export const onRetryCatch = async (
 				resolve();
 			}, waitTime);
 		}).finally(() => {
-			timeout?.unref();
+			if (timeout !== undefined) timeout.unref();
 		});
 	}
 

@@ -1,6 +1,6 @@
 {
 	"name": "again-ts",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Async function retrying written in typescript",
 	"author": "triplesun",
 	"license": "ISC",
