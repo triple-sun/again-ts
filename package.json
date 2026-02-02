@@ -1,6 +1,6 @@
 {
 	"name": "again-ts",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Async function retrying written in typescript",
 	"author": "triplesun",
 	"license": "ISC",
@@ -13,7 +13,7 @@
 		"build": "rimraf build && tsc",
 		"format": "biome format ./src --write",
 		"lint": "biome lint ./src",
-		"prepare": "husky && jest"
+		"prepare": "rimraf build && tsc && husky && jest"
 	},
 	"repository": {
 		"type": "git",
