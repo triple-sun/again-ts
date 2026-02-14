@@ -20,6 +20,7 @@ import {
 	serializeError,
 	tryBoolFn,
 	validateNumericOption,
+	validateOptions,
 	wait
 } from "../src/utils";
 
@@ -64,6 +65,73 @@ describe("utils", () => {
 		it("should ignore undefined values", () => {
 			expect(() =>
 				validateNumericOption("retries", undefined as any)
+			).not.toThrow();
+		});
+	});
+
+	describe("validateOptions", () => {
+		const validOpts = {
+			retries: 3,
+			waitMin: 100,
+			waitMax: 1000,
+			timeMax: 5000,
+			factor: 2,
+			concurrency: 1
+		} as any;
+
+		it("should pass for valid options", () => {
+			expect(() => validateOptions(validOpts)).not.toThrow();
+		});
+
+		it("should validate retries", () => {
+			expect(() => validateOptions({ ...validOpts, retries: -1 })).toThrow(
+				RangeError
+			);
+		});
+
+		it("should validate waitMin", () => {
+			expect(() =>
+				validateOptions({ ...validOpts, waitMin: Number.POSITIVE_INFINITY })
+			).toThrow(RangeError);
+		});
+
+		it("should validate waitMax", () => {
+			expect(() =>
+				validateOptions({ ...validOpts, waitMax: "100" as any })
+			).toThrow(ErrorTypeError);
+		});
+
+		it("should validate timeMax", () => {
+			expect(() => validateOptions({ ...validOpts, timeMax: -1 })).toThrow(
+				RangeError
+			);
+		});
+
+		it("should validate factor", () => {
+			expect(() => validateOptions({ ...validOpts, factor: NaN })).toThrow(
+				ErrorTypeError
+			);
+		});
+
+		it("should validate concurrency", () => {
+			expect(() => validateOptions({ ...validOpts, concurrency: 0 })).toThrow(
+				RangeError
+			);
+		});
+
+		it("should throw if waitMin > waitMax", () => {
+			expect(() =>
+				validateOptions({ ...validOpts, waitMin: 1000, waitMax: 100 })
+			).toThrow(RangeError);
+		});
+
+		it("should allow waitMin > waitMax if waitMax is infinity", () => {
+			expect(() =>
+				validateOptions({
+					...validOpts,
+					waitMin: 1000,
+					waitMax: Number.POSITIVE_INFINITY
+				})
 			).not.toThrow();
 		});
 	});
@@ -209,9 +277,9 @@ describe("utils", () => {
 
 		it("should apply linear backoff", () => {
 			const opts = { ...baseOpts, linear: true };
-			expect(getWaitTime(opts, 10000, 0)).toBe(0); // retriesTaken 0 * waitMin
-			expect(getWaitTime(opts, 10000, 1)).toBe(100);
-			expect(getWaitTime(opts, 10000, 2)).toBe(200);
+			expect(getWaitTime(opts, 10000, 0)).toBe(100); // retriesTaken 0 * waitMin
+			expect(getWaitTime(opts, 10000, 1)).toBe(200);
+			expect(getWaitTime(opts, 10000, 2)).toBe(300);
 		});
 
 		it("should apply exponential factor", () => {
@@ -275,7 +343,8 @@ describe("utils", () => {
 			const ctx = createRetryContext();
 			const opts = createInternalOptions({
 				retries: 3,
-				consumeIf: () => false
+				consumeIf: () => false,
+				waitMin: 10
 			});
 			const error = new ErrorTypeError("wrong type");
 
@@ -284,7 +353,7 @@ describe("utils", () => {
 	});
 	// biome-ignore lint/complexity/noExcessiveLinesPerFunction: <jest!>
 	describe("onRetryCatch", () => {
-		const baseOpts = createInternalOptions({});
+		const baseOpts = createInternalOptions({ waitMin: 10 });
 		const createCtx = () => createRetryContext();
 
 		it("should respect consumeIf", async () => {
@@ -409,22 +478,19 @@ describe("utils", () => {
 		});
 
 		it("should wait when waitIfNotConsumed is true even if shouldConsume is false", async () => {
-			jest.useFakeTimers();
 			const ctx = createCtx();
 			const error = new Error("fail");
 			const opts = createInternalOptions({
 				consumeIf: () => false,
 				waitIfNotConsumed: true,
-				waitMin: 100,
+				waitMin: 10,
 				retries: 5
 			});
 
 			const promise = onRetryCatch(error, ctx, opts);
-			jest.advanceTimersByTime(100);
 			await promise;
 
 			expect(ctx.retriesTaken).toBe(0); // Should not consume
-			jest.useRealTimers();
 		});
 
 		it("should not wait when waitIfNotConsumed is false and shouldConsume is false", async () => {
@@ -433,7 +499,7 @@ describe("utils", () => {
 			const opts = createInternalOptions({
 				consumeIf: () => false,
 				waitIfNotConsumed: false,
-				waitMin: 1000,
+				waitMin: 10,
 				retries: 5
 			});
 
@@ -455,6 +521,31 @@ describe("utils", () => {
 			await onRetryCatch(error, ctx, opts);
 
 			expect(ctx.retriesTaken).toBe(1);
+		});
+
+		it("should abort when signal is aborted during wait", async () => {
+			jest.useFakeTimers();
+			const ctx = createCtx();
+			const error = new Error("fail");
+			const controller = new AbortController();
+			const opts = createInternalOptions({
+				waitMin: 10000,
+				signal: controller.signal
+			});
+
+			const promise = onRetryCatch(error, ctx, opts);
+
+			// Fast-forward time partially
+			jest.advanceTimersByTime(500);
+
+			// Abort
+			const abortReason = new Error("aborted");
+			controller.abort(abortReason);
+
+			// Should reject immediately
+			await expect(promise).rejects.toBe(abortReason);
+
+			jest.useRealTimers();
 		});
 	});
 });

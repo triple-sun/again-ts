@@ -55,7 +55,7 @@ describe("retry wait times", () => {
 		const WAIT_MIN = 100;
 		let tries = 0;
 
-		const promise = retry(
+		retry(
 			"safe",
 			() => {
 				tries++;
@@ -70,23 +70,17 @@ describe("retry wait times", () => {
 			}
 		);
 
-		// 1st attempt & 2nd attempt (1st retry with wait=0) happen immediately
+		// 1st attempt
 		await flushPromises();
-		expect(tries).toBe(2);
+		expect(tries).toBe(1);
 
 		// 2nd retry (triesConsumed=1): wait = waitMin * 1 = 100
 		await jest.advanceTimersByTimeAsync(WAIT_MIN);
-		expect(tries).toBe(3);
+		expect(tries).toBe(2);
 
 		// 3rd retry (triesConsumed=2): wait = waitMin * 2 = 200
 		await jest.advanceTimersByTimeAsync(WAIT_MIN * 2);
-		expect(tries).toBe(4);
-
-		try {
-			await promise;
-		} catch {
-			// ignore expected error
-		}
+		expect(tries).toBe(3);
 	});
 
 	it("should apply exponential backoff", async () => {
@@ -94,7 +88,7 @@ describe("retry wait times", () => {
 		const FACTOR = 2;
 		let tries = 0;
 
-		const promise = retry(
+		retry(
 			"safe",
 			() => {
 				tries++;
@@ -124,12 +118,6 @@ describe("retry wait times", () => {
 		// 4th attempt (3rd retry): wait = waitMin * factor^(3-1) = 100 * 4 = 400
 		await jest.advanceTimersByTimeAsync(WAIT_MIN * FACTOR * FACTOR);
 		expect(tries).toBe(4);
-
-		try {
-			await promise;
-		} catch {
-			// ignore expected error
-		}
 	});
 
 	it("should respect waitMax", async () => {

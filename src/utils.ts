@@ -169,7 +169,7 @@ export const getWaitTime = (
 	triesConsumed: Readonly<number>
 ): Readonly<number> => {
 	const randomX = opts.random ? Math.random() + 1 : 1;
-	const linearX = opts.linear ? triesConsumed : 1;
+	const linearX = opts.linear ? triesConsumed + 1 : 1;
 	const factorX = opts.factor ** (Math.max(1, triesConsumed + 1) - 1);
 
 	const waitFor = Math.min(

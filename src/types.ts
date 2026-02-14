@@ -33,7 +33,7 @@ export interface RetryContext {
 export interface RetryOptions {
 	/**
 	 * @description retry this amount of times (not including 1st attempt)
-	 *  Infinity === try indefinetely
+	 *  Infinity === try indefinitely
 	 * @default RETRIES_DEFAULT
 	 */
 	retries?: number;
@@ -67,7 +67,7 @@ export interface RetryOptions {
 	readonly factor?: number;
 
 	/**
-	 * @description multply delay by attempt
+	 * @description multiply delay by attempt
 	 * @default LINEAR_DEFAULT
 	 */
 	readonly linear?: boolean;
